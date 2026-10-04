@@ -138,9 +138,48 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 
+-- ==============================================================================
+-- Access model
+-- ==============================================================================
+-- Data access is role-gated, not merely authenticated. A signed-in user with no
+-- role claim gets zero rows.
+--
+-- The role lives in `raw_app_meta_data`, which only the service role and the
+-- dashboard can write. It must NOT be read from `user_metadata`, because that
+-- is user-editable and would let anyone self-promote to admin.
+--
+-- Grant a role to a user (dashboard -> Authentication -> user -> app_metadata,
+-- or the Management API):
+--   {"role": "staff"}   read + write
+--   {"role": "admin"}   read + write
+--
+-- `/signup` is open by default, so an unprivileged account can be created by
+-- anyone. That is acceptable here *only* because no role is attached to it --
+-- a self-registered account matches no policy below. Disable open signup in
+-- the dashboard (Authentication -> Sign In / Providers -> email -> "Allow
+-- new users to sign up" off) so the surface is not there at all.
+
+-- Kept out of `public` so it is not part of the Data API surface. SECURITY
+-- INVOKER (the default) on purpose: it reads the caller's own JWT and grants
+-- nothing, so it cannot be used to escalate.
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.current_role()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT coalesce(
+    (SELECT auth.jwt() -> 'app_metadata' ->> 'role'),
+    ''
+  );
+$$;
+
 -- Postgres has no CREATE POLICY IF NOT EXISTS, so drop first to keep this
 -- script re-runnable. A multi-statement script runs in one implicit
 -- transaction, so a single duplicate-policy error would roll all of it back.
+-- The old `Allow public ...` policies are dropped by name so re-running this
+-- script also retires them.
 DROP POLICY IF EXISTS "Allow public read access on categories" ON public.categories;
 DROP POLICY IF EXISTS "Allow public read access on suppliers" ON public.suppliers;
 DROP POLICY IF EXISTS "Allow public read access on warehouses" ON public.warehouses;
@@ -151,22 +190,6 @@ DROP POLICY IF EXISTS "Allow public read access on transactions" ON public.trans
 DROP POLICY IF EXISTS "Allow public read access on requests" ON public.requests;
 DROP POLICY IF EXISTS "Allow public read access on audits" ON public.audits;
 
--- Allow public read access (for anon & authenticated users)
-CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on suppliers" ON public.suppliers FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on warehouses" ON public.warehouses FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on departments" ON public.departments FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on items" ON public.items FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on purchases" ON public.purchases FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on transactions" ON public.transactions FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on requests" ON public.requests FOR SELECT USING (true);
-CREATE POLICY "Allow public read access on audits" ON public.audits FOR SELECT USING (true);
-
--- WARNING (SECURITY): these grant the anon/publishable key full INSERT/UPDATE/
--- DELETE on every table. The publishable key ships in the client bundle, so
--- anyone who loads the site can rewrite all inventory data. Replace with
--- `TO authenticated` + a role check before this project is exposed to a
--- network you do not control.
 DROP POLICY IF EXISTS "Allow public modifications on categories" ON public.categories;
 DROP POLICY IF EXISTS "Allow public modifications on suppliers" ON public.suppliers;
 DROP POLICY IF EXISTS "Allow public modifications on warehouses" ON public.warehouses;
@@ -177,13 +200,84 @@ DROP POLICY IF EXISTS "Allow public modifications on transactions" ON public.tra
 DROP POLICY IF EXISTS "Allow public modifications on requests" ON public.requests;
 DROP POLICY IF EXISTS "Allow public modifications on audits" ON public.audits;
 
--- Allow public modifications during development
-CREATE POLICY "Allow public modifications on categories" ON public.categories FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on suppliers" ON public.suppliers FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on warehouses" ON public.warehouses FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on departments" ON public.departments FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on items" ON public.items FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on purchases" ON public.purchases FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on transactions" ON public.transactions FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on requests" ON public.requests FOR ALL USING (true);
-CREATE POLICY "Allow public modifications on audits" ON public.audits FOR ALL USING (true);
+DROP POLICY IF EXISTS "staff_access on categories" ON public.categories;
+DROP POLICY IF EXISTS "staff_access on suppliers" ON public.suppliers;
+DROP POLICY IF EXISTS "staff_access on warehouses" ON public.warehouses;
+DROP POLICY IF EXISTS "staff_access on departments" ON public.departments;
+DROP POLICY IF EXISTS "staff_access on items" ON public.items;
+DROP POLICY IF EXISTS "staff_access on purchases" ON public.purchases;
+DROP POLICY IF EXISTS "staff_access on transactions" ON public.transactions;
+DROP POLICY IF EXISTS "staff_access on requests" ON public.requests;
+DROP POLICY IF EXISTS "staff_access on audits" ON public.audits;
+
+-- `TO authenticated` drops the anonymous role entirely: no policy below is in
+-- force for `anon`, so a session-less request using only the publishable key
+-- matches nothing. WITH CHECK is required on the write half as well -- without
+-- it a caller could insert or reassign rows that the USING clause never saw.
+CREATE POLICY "staff_access on categories" ON public.categories FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on suppliers" ON public.suppliers FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on warehouses" ON public.warehouses FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on departments" ON public.departments FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on items" ON public.items FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on purchases" ON public.purchases FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on transactions" ON public.transactions FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on requests" ON public.requests FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+CREATE POLICY "staff_access on audits" ON public.audits FOR ALL TO authenticated
+  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
+  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+
+-- ==============================================================================
+-- Table grants
+-- ==============================================================================
+-- RLS is not sufficient on its own: Postgres evaluates grants first, and a role
+-- with no table grant gets `permission denied for table` regardless of policy.
+-- Supabase stopped auto-exposing new public-schema tables to the Data API
+-- (enforced for all projects on 2026-10-30), so these are granted explicitly
+-- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing the
+-- authenticated role access to anything added later by accident.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.purchases TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.transactions TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.requests TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.audits TO authenticated;
+
+REVOKE ALL ON public.categories FROM anon;
+REVOKE ALL ON public.suppliers FROM anon;
+REVOKE ALL ON public.warehouses FROM anon;
+REVOKE ALL ON public.departments FROM anon;
+REVOKE ALL ON public.items FROM anon;
+REVOKE ALL ON public.purchases FROM anon;
+REVOKE ALL ON public.transactions FROM anon;
+REVOKE ALL ON public.requests FROM anon;
+REVOKE ALL ON public.audits FROM anon;
+
+-- Same protection for tables created after this script runs.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
