@@ -57,6 +57,9 @@ Otherwise anyone can register, though a role-less account still matches no polic
 
 ## Deploying to Vercel
 
+See [deploy.md](deploy.md) for the full ordered checklist, including the Supabase-side redirect
+and SMTP configuration that a Vercel deploy cannot complete on its own.
+
 Push to GitHub, then import the repository at [vercel.com/new](https://vercel.com/new). The
 framework preset, build command (`npm run build`), and output directory are all detected
 automatically.
