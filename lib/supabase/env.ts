@@ -15,6 +15,21 @@ const KEY_VARIABLES = [
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
 ] as const
 
+/**
+ * Values a developer gets by copying .env.example and not editing it. These are
+ * syntactically valid, so only a content check catches them.
+ */
+const PLACEHOLDER_MARKERS = [
+  'your-project-id',
+  'your-publishable-key-here',
+  'placeholder-project-id',
+  'placeholder-anon-key',
+]
+
+function isPlaceholder(value: string): boolean {
+  return PLACEHOLDER_MARKERS.some((marker) => value.includes(marker))
+}
+
 export type SupabaseEnv = {
   url: string
   key: string
@@ -38,15 +53,20 @@ function readKey(): string | undefined {
 export function supabaseEnvProblems(): string[] {
   const problems: string[] = []
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = readKey()
 
   if (!url) {
     problems.push('NEXT_PUBLIC_SUPABASE_URL is not set')
+  } else if (isPlaceholder(url)) {
+    problems.push('NEXT_PUBLIC_SUPABASE_URL still holds the .env.example placeholder')
   } else if (!/^https?:\/\/\S+\.\S+/.test(url)) {
     problems.push('NEXT_PUBLIC_SUPABASE_URL is not a valid http(s) URL')
   }
 
-  if (!readKey()) {
+  if (!key) {
     problems.push(`neither ${KEY_VARIABLES.join(' nor ')} is set`)
+  } else if (isPlaceholder(key)) {
+    problems.push('the Supabase key still holds the .env.example placeholder')
   }
 
   return problems

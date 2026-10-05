@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { readSupabaseEnv, supabaseEnvProblems } from '@/lib/supabase/env'
 
 type Status = 'checking' | 'connected' | 'schema_missing' | 'error' | 'unconfigured'
 
@@ -34,17 +35,15 @@ export function ConnectionStatus() {
   // Pure probe: resolves a result rather than writing state, so the caller
   // applies it from a promise callback instead of during render.
   const runProbe = useCallback(async (): Promise<Probe> => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key =
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    // Same check the proxy and server clients use, so this badge cannot claim
+    // "connected" while the app itself refuses to serve.
+    const problems = supabaseEnvProblems()
 
-    if (!url || !key) {
-      return {
-        status: 'unconfigured',
-        detail: 'NEXT_PUBLIC_SUPABASE_URL or the publishable key is missing from .env.local',
-      }
+    if (problems.length > 0) {
+      return { status: 'unconfigured', detail: problems.join('; ') }
     }
+
+    const { url } = readSupabaseEnv()
 
     try {
       const { error } = await createClient().from('categories').select('id').limit(1)

@@ -181,16 +181,43 @@ the `UPDATE auth.users` snippet in step 3.
 
 **Build fails on a missing variable.** It was set only in `.env.local`, which Vercel cannot see.
 
-**`/login` and `/signup` return 500 while `/` returns 200.** This is the signature of Supabase
-environment variables missing from the Vercel project, and it is worth recognising because the
-symptom looks like an auth bug rather than a config bug. `lib/supabase/server.ts` asserts those
-variables with `!`, which is a compile-time-only check, so `undefined` is handed to
-`createServerClient` and it throws. At the same time `lib/supabase/proxy.ts` returns early when
-the variables are absent, which skips the auth redirect entirely, so `/` answers `200` instead of
-`307`. Confirm with `GET /api/supabase-test` and look for `"status":"unconfigured"`.
+**Any protected route returns 503, and `/login` still renders.** This is the signature of Supabase
+environment variables missing from the Vercel project. `/api/supabase-test` reports
+`"status":"unconfigured"` with a `details` array naming each missing or placeholder variable.
 
-No data is exposed in this state, because with no URL or key the browser client has nothing to
-query. Add the variables and redeploy.
+**A route returns 200 while `/api/supabase-test` says `unconfigured`.** Those were separate checks
+and had drifted apart. Every consumer now shares `supabaseEnvProblems()` in
+`lib/supabase/env.ts`, so the diagnostic cannot disagree with the app.
+
+## What happens when the variables are missing
+
+The proxy **fails closed**. Without a URL and a key no session can be verified, so serving a
+protected route would hand it to an unauthenticated visitor. Public paths stay reachable so the
+diagnosis is still available:
+
+| Request | Response |
+| --- | --- |
+| `/`, `/items`, any protected route | `503` with a plain-text list of the missing variables |
+| `/login`, `/signup` | `200`; submitting the form shows the same message inline |
+| `/api/supabase-test` | `200` with `"status":"unconfigured"` and the variable names |
+
+Earlier revisions of this app answered `200` on protected routes in this state, because the proxy
+returned before the auth redirect. Nothing was leaked — RLS still applied and the browser client had
+no project to query — but a shell rendering for anonymous visitors is the wrong default, so it now
+refuses instead.
+
+`lib/supabase/env.ts` treats a blank variable and an unedited `.env.example` as unconfigured. Both
+were previously read as valid: `KEY=` in an env file yields `''` rather than `undefined`, and
+`https://your-project-id.supabase.co` is a syntactically valid URL.
+
+Verify the validation itself, without deploying:
+
+```bash
+npm run check:env
+```
+
+Add the variables and redeploy. A restart is not enough, because `NEXT_PUBLIC_*` values are inlined
+at build time.
 
 ## 7. Rollback
 
