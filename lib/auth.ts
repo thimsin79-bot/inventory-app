@@ -3,6 +3,8 @@ export type AuthState = {
   message?: string
   email?: string
   name?: string
+  /** Set when sign-in failed only because the email address is unconfirmed. */
+  needsConfirmation?: boolean
 }
 
 export const MIN_PASSWORD_LENGTH = 8
