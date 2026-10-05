@@ -6,6 +6,7 @@ import type { User } from '@supabase/supabase-js'
 import { emailToUsername, normalizeUsername, passwordProblem, usernameProblem, usernameToEmail, type AuthState } from '@/lib/auth'
 import {
   ROLE_LABELS,
+  canChangeOwnRole,
   describeAccount,
   isRole,
   isSelfAccount,
@@ -24,8 +25,12 @@ type AdminAuth = ReturnType<typeof createAdminClient>
  * The admin API has no lookup-by-email call and caps a page at 1000 rows, so
  * anything that needs to see more than one account has to page. Both the reset
  * and the role list go through here so the paging cap lives in one place.
+ *
+ * `truncated` is true when the cap was hit before the last page. The role form
+ * needs to know: an incomplete list cannot prove another admin exists, and that
+ * proof is what makes changing your own role safe.
  */
-async function listAllUsers(admin: AdminAuth): Promise<User[]> {
+async function listAllUsers(admin: AdminAuth): Promise<{ users: User[]; truncated: boolean }> {
   const found: User[] = []
 
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -37,10 +42,10 @@ async function listAllUsers(admin: AdminAuth): Promise<User[]> {
     if (error) throw new Error(error.message)
 
     found.push(...data.users)
-    if (data.users.length < PER_PAGE) break
+    if (data.users.length < PER_PAGE) return { users: found, truncated: false }
   }
 
-  return found
+  return { users: found, truncated: true }
 }
 
 /**
@@ -49,12 +54,7 @@ async function listAllUsers(admin: AdminAuth): Promise<User[]> {
  * Accounts here are `username@users.invalid`, which makes the address derivable
  * from the username alone and avoids listing every account on screen.
  */
-async function findUserByEmail(
-  admin: AdminAuth,
-  email: string,
-): Promise<{ id: string; app_metadata?: Record<string, unknown> } | null> {
-  const users = await listAllUsers(admin)
-
+function findUserByEmail(users: User[], email: string): User | null {
   return users.find((user) => user.email?.toLowerCase() === email) ?? null
 }
 
@@ -92,7 +92,8 @@ export async function resetPassword(
 
   try {
     const admin = createAdminClient()
-    const target = await findUserByEmail(admin, usernameToEmail(username))
+    const { users } = await listAllUsers(admin)
+    const target = findUserByEmail(users, usernameToEmail(username))
 
     if (!target) {
       return { error: `No account found for "${username}".`, username }
@@ -143,7 +144,7 @@ export async function listAccounts(): Promise<AccountList> {
 
   try {
     const admin = createAdminClient()
-    const users = await listAllUsers(admin)
+    const { users } = await listAllUsers(admin)
 
     return {
       ok: true,
@@ -187,21 +188,23 @@ export async function setRole(_prev: AuthState, formData: FormData): Promise<Aut
 
   try {
     const admin = createAdminClient()
-    const target = await findUserByEmail(admin, usernameToEmail(username))
+    const { users, truncated } = await listAllUsers(admin)
+    const target = findUserByEmail(users, usernameToEmail(username))
 
     if (!target) {
       return { error: `No account found for "${username}".`, username }
     }
 
-    // Refuse to change your own role. Demoting the last admin is unrecoverable
-    // through the app -- /admin/users is the only surface that writes this field,
-    // and it is the page the demotion would lock you out of. Another admin can
-    // still change it, and a Service Role key or the dashboard always can.
+    // Changing your own role is allowed, except when it would remove the last
+    // admin -- /admin/users is the only surface that writes this claim, so zero
+    // admins means nobody can ever grant one back. `canChangeOwnRole` decides it
+    // from the account list already fetched above; the same page serves the whole
+    // list, so this costs nothing extra.
     if (isSelfAccount(target.id, adminUser.id)) {
-      return {
-        error:
-          'You cannot change your own role. Ask another admin to do it, or use the dashboard.',
-        username,
+      const decision = canChangeOwnRole(users, adminUser.id, requested, !truncated)
+
+      if (!decision.allowed) {
+        return { error: decision.reason, username }
       }
     }
 

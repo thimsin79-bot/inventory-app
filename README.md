@@ -81,10 +81,18 @@ flow and no mailbox, so public sign-up is the only way to create an account; wit
 register at all.
 
 **A new signup starts with no role.** Sign-up runs on the anon key, which cannot write
-`app_metadata`, so the account matches no policy until an admin assigns a role. That is harmless —
-it sees no rows — and the app says so explicitly rather than showing empty screens, since an
-unexplained blank app is indistinguishable from a broken one. Until then there is nothing to reach,
-so the nav is hidden as well.
+`app_metadata`, so the account matches no policy until a role is set. That is harmless — it sees
+no rows — and the app says so explicitly rather than showing empty screens, since an unexplained
+blank app is indistinguishable from a broken one. Until then there is nothing to reach, so the nav
+is hidden as well.
+
+Set the **first** role by hand, with the statement above, or in Supabase → Authentication → the
+account → `app_metadata`. It has to be done outside the app: `/admin/users` needs you to be an
+admin already, and it refuses to demote the last one. Once a second admin exists, an admin can
+change their own role from that page — the check is "is another admin left", not "is this me".
+
+Sign out and back in afterwards. The role is baked into the JWT when the token is issued, so an
+existing session keeps the old claims until it expires (up to an hour).
 
 Run `npm run check` before deploying. `check:rls` diffs the policy matrix in `supabase/schema.sql`
 against the role model in `lib/roles.ts` and fails if they drift.

@@ -25,6 +25,13 @@ type RoleSource = {
 }
 
 /**
+ * An account as far as a role decision is concerned: an id to exclude, plus its
+ * claims. `id` is required rather than optional so that comparing it can never
+ * match on `undefined === undefined`.
+ */
+export type RoleHolder = RoleSource & { id: string }
+
+/**
  * Highest privilege first. The order is the ladder: each role can do everything
  * the ones below it can, and `admin` adds account management on top.
  */
@@ -206,11 +213,63 @@ export function describeAccount(
 /**
  * Whether `viewerId` is the account named by `targetId`.
  *
- * The role form refuses to change your own role: demoting the last admin is
- * unrecoverable through the app, because `/admin/users` is the only surface that
- * writes the claim and it is the page the lockout removes. Exported so the guard
- * can be tested without a Service Role key.
+ * Identifying yourself is what lets the role form apply the last-admin rule
+ * below, which is why it is separated from that decision.
  */
 export function isSelfAccount(targetId: string, viewerId: string): boolean {
   return targetId === viewerId
+}
+
+export type RoleChangeDecision = { allowed: true } | { allowed: false; reason: string }
+
+/**
+ * Decides whether an admin may change their *own* role.
+ *
+ * The hazard is not self-assignment, it is ending up with no admin at all:
+ * `/admin/users` is the only surface that writes this claim, so zero admins
+ * means nobody can ever grant one back. Blocking every self-change prevents that
+ * but makes the first role unassignable through the app, since a role-less
+ * account cannot open the page at all -- a deadlock for anyone setting the
+ * project up. So the rule is narrower: you may change your own role as long as
+ * at least one other admin remains.
+ *
+ * Promoting yourself, or setting yourself to admin again, is always allowed: it
+ * cannot reduce the admin count.
+ *
+ * `listComplete` must be false when the caller could not enumerate every account.
+ * An incomplete list could hide the very admin that makes the change safe, so it
+ * is treated as "no other admin" and refused. Fail closed, same as an unrecognised
+ * role.
+ */
+export function canChangeOwnRole(
+  users: RoleHolder[],
+  viewerId: string,
+  requested: Role,
+  listComplete: boolean,
+): RoleChangeDecision {
+  if (requested === 'admin') return { allowed: true }
+
+  if (!listComplete) {
+    return {
+      allowed: false,
+      reason: 'Every account could not be listed, so another admin could not be confirmed.',
+    }
+  }
+
+  // Counted by id rather than by subtracting one from the total, so the viewer is
+  // excluded even if their own claim changed between the session read and here.
+  // `roleOf` is what keeps a `user_metadata` role or a typo from counting.
+  const others = users.filter(
+    (user) => user.id !== viewerId && roleOf(user) === 'admin',
+  ).length
+
+  if (others === 0) {
+    return {
+      allowed: false,
+      reason:
+        'You are the only admin. Give someone else the admin role first, then you can step down.',
+    }
+  }
+
+  return { allowed: true }
 }

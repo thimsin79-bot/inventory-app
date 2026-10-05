@@ -280,9 +280,67 @@ check(
 )
 
 console.log('the self-demotion guard')
-check('the viewer cannot change their own role', roles.isSelfAccount('user-1', 'user-1') === true)
+const me = { id: 'user-1', app_metadata: { role: 'admin' } }
+const them = (id, role) => ({ id, app_metadata: role === null ? {} : { role } })
+const change = (users, requested, complete = true) =>
+  roles.canChangeOwnRole(users, me.id, requested, complete)
+
+check('the viewer can recognise their own account', roles.isSelfAccount('user-1', 'user-1') === true)
 check('an admin can change someone else', roles.isSelfAccount('user-2', 'user-1') === false)
-check('a different id is never self, even with an empty value', roles.isSelfAccount('', '') === true)
+
+console.log('changing your own role is allowed when another admin remains')
+check('the last admin cannot step down', change([me], 'viewer').allowed === false)
+check('the last admin can still confirm itself admin', change([me], 'admin').allowed === true)
+check('one other admin is enough to step down', change([me, them('user-2', 'admin')], 'manager').allowed === true)
+check(
+  'two other admins is enough',
+  change([me, them('user-2', 'admin'), them('user-3', 'admin')], 'viewer').allowed === true,
+)
+
+console.log('what counts as another admin')
+check('a non-admin does not count', change([me, them('user-2', 'staff')], 'viewer').allowed === false)
+check('a role-less account does not count', change([me, them('user-2', null)], 'viewer').allowed === false)
+check(
+  'a typo in the claim does not count',
+  change([me, them('user-2', 'Admin')], 'viewer').allowed === false,
+)
+check(
+  'a user_metadata role does not count -- that field is self-writable',
+  change([me, { id: 'user-2', app_metadata: {}, user_metadata: { role: 'admin' } }], 'viewer').allowed === false,
+)
+check(
+  'the viewer is excluded from their own admin tally',
+  change([me, me], 'viewer').allowed === false,
+)
+check(
+  'two copies of the viewer are still one account',
+  change([me, { ...me }], 'viewer').allowed === false,
+)
+
+console.log('an incomplete account list refuses the demotion')
+check(
+  'a truncated list cannot prove another admin exists',
+  change([me, them('user-2', 'admin')], 'viewer', false).allowed === false,
+)
+check(
+  'an incomplete list still permits confirming yourself admin',
+  change([me, them('user-2', 'admin')], 'admin', false).allowed === true,
+)
+check('an empty list means no admin at all', change([], 'admin').allowed === true)
+
+console.log('the refusal explains itself')
+check(
+  'being the last admin says how to fix it',
+  change([me], 'viewer').reason.includes('only admin'),
+)
+check(
+  'an incomplete list says it could not confirm an admin',
+  change([me], 'viewer', false).reason.includes('could not be confirmed'),
+)
+check(
+  'an allowed change carries no reason',
+  change([me, them('user-2', 'admin')], 'admin').reason === undefined,
+)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

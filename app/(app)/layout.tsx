@@ -57,7 +57,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           {pendingRole ? (
             <EmptyState
               title="Your account has no role yet"
-              hint="An admin needs to assign you one before anything here becomes visible. Sign out and check back once they have."
+              // Spells out both routes, because the obvious one is dead: a role-less
+              // account cannot open Admin -> Users, so for the first account in a
+              // project there is nobody to ask and the instruction has to be the
+              // dashboard or SQL. Sign out afterwards, or the claim stays out of the
+              // token until it expires.
+              hint="Nothing here is visible until you have one. If another admin already uses this app, ask them to set it under Admin → Users. If this is the first account in the project, add a role to your app_metadata in Supabase → Authentication → your account, or run the UPDATE statement in README.md. Then sign out and back in."
             />
           ) : (
             children
