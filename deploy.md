@@ -93,6 +93,14 @@ With Git integration enabled, no further configuration is needed:
 - every pull request gets an isolated preview URL
 - the Node version comes from `engines.node`
 
+Check which projects are wired to the repository, because a repo can be connected to more than
+one and every push then builds each of them:
+
+```powershell
+Invoke-RestMethod https://api.github.com/repos/<owner>/<repo>/deployments `
+  -Headers @{ 'User-Agent' = 'opencode'; Accept = 'application/vnd.github+json' }
+```
+
 To confirm the link from your machine:
 
 ```powershell
@@ -148,6 +156,17 @@ the `UPDATE auth.users` snippet in step 3.
 `/api/supabase-test` counts real rows. Re-apply `supabase/seed.sql`.
 
 **Build fails on a missing variable.** It was set only in `.env.local`, which Vercel cannot see.
+
+**`/login` and `/signup` return 500 while `/` returns 200.** This is the signature of Supabase
+environment variables missing from the Vercel project, and it is worth recognising because the
+symptom looks like an auth bug rather than a config bug. `lib/supabase/server.ts` asserts those
+variables with `!`, which is a compile-time-only check, so `undefined` is handed to
+`createServerClient` and it throws. At the same time `lib/supabase/proxy.ts` returns early when
+the variables are absent, which skips the auth redirect entirely, so `/` answers `200` instead of
+`307`. Confirm with `GET /api/supabase-test` and look for `"status":"unconfigured"`.
+
+No data is exposed in this state, because with no URL or key the browser client has nothing to
+query. Add the variables and redeploy.
 
 ## 7. Rollback
 
