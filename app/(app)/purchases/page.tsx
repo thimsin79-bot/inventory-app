@@ -10,12 +10,14 @@ import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
+import { usePermissions } from '@/components/Permissions'
 
 type Row = Tables<'purchases'> & { supplier: Tables<'suppliers'> | null }
 
 const STATUSES = ['Pending', 'Partial', 'Received', 'Cancelled'] as const
 
 export default function PurchasesPage() {
+  const { writeOperational } = usePermissions()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -76,7 +78,10 @@ export default function PurchasesPage() {
     { key: 'count', header: 'Items', render: (r) => <span className="tabular-nums">{r.items_count}</span> },
     { key: 'total', header: 'Total', render: (r) => <span className="tabular-nums font-medium">{formatMoney(r.total)}</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-    {
+  ]
+
+  if (writeOperational) {
+    columns.push({
       key: 'actions',
       header: '',
       className: 'text-right',
@@ -89,8 +94,8 @@ export default function PurchasesPage() {
           ))}
         </div>
       ),
-    },
-  ]
+    })
+  }
 
   return (
     <>
@@ -98,9 +103,11 @@ export default function PurchasesPage() {
         title="Purchases"
         description="Purchase orders raised with suppliers."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-            New purchase
-          </Button>
+          writeOperational ? (
+            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+              New purchase
+            </Button>
+          ) : undefined
         }
       />
 

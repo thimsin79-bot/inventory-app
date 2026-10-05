@@ -10,10 +10,12 @@ import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
+import { usePermissions } from '@/components/Permissions'
 
 type Row = Tables<'audits'>
 
 export default function AuditsPage() {
+  const { writeOperational } = usePermissions()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -80,9 +82,11 @@ export default function AuditsPage() {
         title="Audits"
         description="Physical stock counts compared against system quantity."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-            New audit
-          </Button>
+          writeOperational ? (
+            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+              New audit
+            </Button>
+          ) : undefined
         }
       />
 

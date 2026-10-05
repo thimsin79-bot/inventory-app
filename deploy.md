@@ -60,7 +60,9 @@ Under **Authentication → Sign In / Providers**:
   mapped internally to `<username>@users.invalid`, and `.invalid` never resolves. If confirmation is
   on, a new account is created that can never sign in, because the link cannot be delivered. The
   signup form detects this and says so rather than dead-ending.
-- Disable open sign-up once your accounts exist.
+- **Enable email signup: on.** Unlike a normal app, this one *cannot* turn self-registration off.
+  There is no invite flow and no mailbox to deliver one, so public sign-up is the only way to create
+  an account — see *No email is involved* below. With it off, nothing can onboard anybody.
 
 ### No email is involved
 
@@ -106,7 +108,16 @@ caller cannot use the form to probe which usernames exist. `lib/roles.ts` reads 
 ### Granting a role
 
 Policies are gated on a role claim in `raw_app_meta_data`, so an account with no role matches no
-policy and sees empty tables. Assign one per user:
+policy and sees empty tables. Four roles, descending:
+
+| Role | Can do |
+| --- | --- |
+| `viewer` | read everything, change nothing |
+| `staff` | plus record movements, requests, audits and purchases |
+| `manager` | plus edit the reference tables (categories, warehouses, suppliers, departments) |
+| `admin` | plus manage accounts and roles |
+
+Assign one per user:
 
 ```sql
 UPDATE auth.users
@@ -115,7 +126,20 @@ WHERE email = 'alice@users.invalid';
 ```
 
 Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
-claim is issued into their JWT at token creation time.
+claim is issued into their JWT at token creation.
+
+`/admin/users` does this through a form instead, using the Service Role key. Two things it will not
+do, both deliberate:
+
+- It **merges** into `raw_app_meta_data` rather than replacing it, so other claims survive.
+- It **refuses to change your own role**. Demoting the last admin is unrecoverable through the app,
+  because `/admin/users` is the only surface that writes the claim and it is the page that
+  lockout would remove. Another admin can still do it, and so can the dashboard or the Management
+  API.
+
+`supabase/schema.sql` generates the policies from four arrays rather than writing all thirty-six by
+hand. Change the array, re-run the script, and `npm run check:rls` will fail if the result and
+`lib/roles.ts` disagree.
 
 ## 4. Import and deploy
 
@@ -199,6 +223,26 @@ Checklist:
 
 ## 6. Troubleshooting
 
+**"Signups not allowed for this instance."** GoTrue's `422 signup_disabled`, meaning the project has
+**Enable email signup** switched off. This is a dead end for this app by design — it has no invite
+flow and no mailbox, so public sign-up is the only onboarding path. Turn it back on under
+**Authentication → Sign In / Providers → Email**, or create accounts by hand with a Service Role key:
+
+```ts
+await admin.auth.admin.createUser({
+  email: 'alice@users.invalid',
+  password: '…',
+  email_confirm: true,
+})
+```
+
+Confirm either setting without the dashboard by reading it back:
+
+```powershell
+Invoke-RestMethod "$env:NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" `
+  -Headers @{ apikey = $env:NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY } | Select-Object disable_signup, mailer_autoconfirm
+```
+
 **"Account created, but it cannot sign in yet."** Supabase still has **Confirm email** enabled, so
 `signUp` returned no session and the account can never be confirmed — there is no mailbox. Turn
 **Confirm email** off under Authentication → Sign In / Providers.
@@ -221,8 +265,12 @@ right.** GoTrue returns HTTP `400` for both bad credentials and an unconfirmed a
 action branches on the `email_not_confirmed` code and reports the unconfirmed case separately.
 `Alice` and `alice` are the same account: usernames are case-folded before they are used.
 
-**Everything renders but every table is empty.** The signed-in account has no role claim. See
-the `UPDATE auth.users` snippet in step 3.
+**"Everything renders but every table is empty."** Two separate causes, both common:
+
+- The signed-in account has **no role claim**, so it matches no policy. See *Granting a role* in
+  step 3. The shell shows `No role` under the username, which is the tell.
+- The account has a role but `supabase/schema.sql` has not been re-run since a role was added. The
+  policies name roles explicitly and fail closed, so an unrecognised role matches nothing.
 
 **`totalItemsInDb` is far lower than expected.** The database is genuinely under-seeded;
 `/api/supabase-test` counts real rows. Re-apply `supabase/seed.sql`.

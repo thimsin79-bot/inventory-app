@@ -139,25 +139,35 @@ ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
--- Access model
+-- Roles
 -- ==============================================================================
--- Data access is role-gated, not merely authenticated. A signed-in user with no
--- role claim gets zero rows.
+-- Four roles, descending:
 --
--- The role lives in `raw_app_meta_data`, which only the service role and the
--- dashboard can write. It must NOT be read from `user_metadata`, because that
--- is user-editable and would let anyone self-promote to admin.
+--   viewer   read every table, change nothing
+--   staff    + record movements, requests, audits and purchases
+--   manager  + edit reference data (categories, warehouses, suppliers,
+--             departments)
+--   admin    + manage accounts and roles
 --
--- Grant a role to a user (dashboard -> Authentication -> user -> app_metadata,
--- or the Management API):
---   {"role": "staff"}   read + write
---   {"role": "admin"}   read + write
+-- Every policy names its roles explicitly instead of comparing a rank, so a role
+-- added in one place but not the other matches nothing and fails closed, rather
+-- than silently inheriting the top tier.
 --
--- `/signup` is open by default, so an unprivileged account can be created by
--- anyone. That is acceptable here *only* because no role is attached to it --
--- a self-registered account matches no policy below. Disable open signup in
--- the dashboard (Authentication -> Sign In / Providers -> email -> "Allow
--- new users to sign up" off) so the surface is not there at all.
+-- The role lives in `raw_app_meta_data` and reaches the policies through
+-- `private.current_role()`. It must NOT be read from `user_metadata`, which the
+-- account holder can rewrite via `supabase.auth.updateUser` -- that would let
+-- anyone self-promote to admin. Only the Service Role key or the dashboard can
+-- write `app_metadata`. `/admin/users` writes it through the Service Role after
+-- an admin check.
+--
+-- Grant a role by hand (dashboard -> Authentication -> user -> app_metadata, or
+-- the Management API):
+--   UPDATE auth.users
+--   SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
+--   WHERE email = 'alice@users.invalid';
+--
+-- An account with no role claim matches no policy below and sees zero rows,
+-- which is the correct outcome for an unprivileged self-registered account.
 
 -- Kept out of `public` so it is not part of the Data API surface. SECURITY
 -- INVOKER (the default) on purpose: it reads the caller's own JWT and grants
@@ -175,80 +185,97 @@ AS $$
   );
 $$;
 
--- Postgres has no CREATE POLICY IF NOT EXISTS, so drop first to keep this
--- script re-runnable. A multi-statement script runs in one implicit
--- transaction, so a single duplicate-policy error would roll all of it back.
--- The old `Allow public ...` policies are dropped by name so re-running this
--- script also retires them.
-DROP POLICY IF EXISTS "Allow public read access on categories" ON public.categories;
-DROP POLICY IF EXISTS "Allow public read access on suppliers" ON public.suppliers;
-DROP POLICY IF EXISTS "Allow public read access on warehouses" ON public.warehouses;
-DROP POLICY IF EXISTS "Allow public read access on departments" ON public.departments;
-DROP POLICY IF EXISTS "Allow public read access on items" ON public.items;
-DROP POLICY IF EXISTS "Allow public read access on purchases" ON public.purchases;
-DROP POLICY IF EXISTS "Allow public read access on transactions" ON public.transactions;
-DROP POLICY IF EXISTS "Allow public read access on requests" ON public.requests;
-DROP POLICY IF EXISTS "Allow public read access on audits" ON public.audits;
+-- ==============================================================================
+-- Policies
+-- ==============================================================================
+-- Generated rather than written out longhand: nine tables times four commands is
+-- thirty-six policies, and hand-maintained copies of the same two role lists are
+-- exactly where a permission matrix rots. The lists below are the single source
+-- of truth; `scripts/check-rls.mjs` diffs them against `lib/roles.ts`, which is
+-- the client-side mirror the UI reads to decide which buttons to show.
+--
+-- Two policies per table:
+--
+--   read on <table>   SELECT, for anyone holding any role
+--   write on <table>  INSERT / UPDATE / DELETE, for the roles that may modify it
+--
+-- `TO authenticated` drops the anonymous role entirely -- no policy below is in
+-- force for `anon`, so a session-less request holding only the publishable key
+-- matches nothing.
+--
+-- WITH CHECK is as load-bearing as USING here. Without it a caller could insert
+-- a row, or update one, that the USING clause would never have let them see.
 
-DROP POLICY IF EXISTS "Allow public modifications on categories" ON public.categories;
-DROP POLICY IF EXISTS "Allow public modifications on suppliers" ON public.suppliers;
-DROP POLICY IF EXISTS "Allow public modifications on warehouses" ON public.warehouses;
-DROP POLICY IF EXISTS "Allow public modifications on departments" ON public.departments;
-DROP POLICY IF EXISTS "Allow public modifications on items" ON public.items;
-DROP POLICY IF EXISTS "Allow public modifications on purchases" ON public.purchases;
-DROP POLICY IF EXISTS "Allow public modifications on transactions" ON public.transactions;
-DROP POLICY IF EXISTS "Allow public modifications on requests" ON public.requests;
-DROP POLICY IF EXISTS "Allow public modifications on audits" ON public.audits;
+DO $policies$
+DECLARE
+  -- Reference data is org-wide configuration, changed rarely. Operational data
+  -- is the day-to-day movement of stock and the paperwork around it.
+  reference_tables   text[] := ARRAY['categories', 'suppliers', 'warehouses', 'departments'];
+  operational_tables text[] := ARRAY['items', 'purchases', 'transactions', 'requests', 'audits'];
+  all_tables         text[] := reference_tables || operational_tables;
 
-DROP POLICY IF EXISTS "staff_access on categories" ON public.categories;
-DROP POLICY IF EXISTS "staff_access on suppliers" ON public.suppliers;
-DROP POLICY IF EXISTS "staff_access on warehouses" ON public.warehouses;
-DROP POLICY IF EXISTS "staff_access on departments" ON public.departments;
-DROP POLICY IF EXISTS "staff_access on items" ON public.items;
-DROP POLICY IF EXISTS "staff_access on purchases" ON public.purchases;
-DROP POLICY IF EXISTS "staff_access on transactions" ON public.transactions;
-DROP POLICY IF EXISTS "staff_access on requests" ON public.requests;
-DROP POLICY IF EXISTS "staff_access on audits" ON public.audits;
+  read_roles     text[] := ARRAY['admin', 'manager', 'staff', 'viewer'];
+  reference_rw   text[] := ARRAY['admin', 'manager'];
+  operational_rw text[] := ARRAY['admin', 'manager', 'staff'];
 
--- `TO authenticated` drops the anonymous role entirely: no policy below is in
--- force for `anon`, so a session-less request using only the publishable key
--- matches nothing. WITH CHECK is required on the write half as well -- without
--- it a caller could insert or reassign rows that the USING clause never saw.
-CREATE POLICY "staff_access on categories" ON public.categories FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+  t          text;
+  writable   text[];
+  read_literal text;
+  rw_literal   text;
+BEGIN
+  read_literal := (
+    SELECT string_agg(quote_literal(role), ', ' ORDER BY ord)
+    FROM unnest(read_roles) WITH ORDINALITY AS u(role, ord)
+  );
 
-CREATE POLICY "staff_access on suppliers" ON public.suppliers FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+  FOREACH t IN ARRAY all_tables LOOP
+    IF t = ANY (reference_tables) THEN
+      writable := reference_rw;
+    ELSE
+      writable := operational_rw;
+    END IF;
 
-CREATE POLICY "staff_access on warehouses" ON public.warehouses FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    -- Folded to a SQL literal once per table. Combined with the (SELECT ...)
+    -- wrapper on current_role(), this keeps the role read as an InitPlan instead
+    -- of re-evaluating auth.jwt() per row.
+    rw_literal := (
+      SELECT string_agg(quote_literal(role), ', ' ORDER BY ord)
+      FROM unnest(writable) WITH ORDINALITY AS u(role, ord)
+    );
 
-CREATE POLICY "staff_access on departments" ON public.departments FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    -- Drop first to keep this script re-runnable: a multi-statement script runs
+    -- in one implicit transaction, so a single duplicate-policy error would roll
+    -- all of it back. The pre-permission-matrix `staff_access on <table>` and
+    -- `Allow public ...` policies are named here too, so re-running retires them.
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'staff_access on ' || t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public read access on ' || t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public modifications on ' || t, t);
 
-CREATE POLICY "staff_access on items" ON public.items FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'read on ' || t, t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'write on ' || t, t);
 
-CREATE POLICY "staff_access on purchases" ON public.purchases FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
+      'read on ' || t, t, read_literal
+    );
 
-CREATE POLICY "staff_access on transactions" ON public.transactions FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
+      'write on ' || t, t, rw_literal
+    );
 
-CREATE POLICY "staff_access on requests" ON public.requests FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s])) WITH CHECK ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
+      'write on ' || t, t, rw_literal, rw_literal
+    );
 
-CREATE POLICY "staff_access on audits" ON public.audits FOR ALL TO authenticated
-  USING ((SELECT private.current_role()) IN ('admin', 'staff'))
-  WITH CHECK ((SELECT private.current_role()) IN ('admin', 'staff'));
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
+      'write on ' || t, t, rw_literal
+    );
+  END LOOP;
+END
+$policies$;
 
 -- ==============================================================================
 -- Table grants
@@ -264,10 +291,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.purchases TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.transactions TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.requests TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.audits TO authenticated;
+
+-- No screen deletes a purchase, transaction, request or audit, and
+-- `services/inventoryService.ts` exports no delete for them either -- so DELETE is
+-- withheld rather than left to the policies alone. If a delete feature is ever
+-- added for one of these, add the grant in the same change. `items` keeps DELETE
+-- because the inventory screen does delete items.
+GRANT SELECT, INSERT, UPDATE ON public.purchases TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.transactions TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.requests TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.audits TO authenticated;
 
 REVOKE ALL ON public.categories FROM anon;
 REVOKE ALL ON public.suppliers FROM anon;

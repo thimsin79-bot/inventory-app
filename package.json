@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint",
     "check:env": "node scripts/check-supabase-env.mjs",
-    "check:auth": "node scripts/check-auth.mjs"
+    "check:auth": "node scripts/check-auth.mjs",
+    "check:rls": "node scripts/check-rls.mjs",
+    "check": "npm run check:env && npm run check:auth && npm run check:rls"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

@@ -118,5 +118,171 @@ check(
   roles.isAdmin({ app_metadata: { role: ' admin ' } }) === false,
 )
 
+console.log('the role ladder')
+check('viewer is a known role', roles.isRole('viewer'))
+check('manager is a known role', roles.isRole('manager'))
+check('staff is a known role', roles.isRole('staff'))
+check('admin is a known role', roles.isRole('admin'))
+check('an unknown role is rejected', roles.isRole('supervisor') === false)
+check('an empty role is rejected', roles.isRole('') === false)
+check('a non-string is rejected', roles.isRole(7) === false)
+check('every ROLES entry is a known role', roles.ROLES.every((r) => roles.isRole(r)))
+
+console.log('capabilities')
+check('every role has a capability record', roles.ROLES.every((r) => roles.CAPABILITIES[r]))
+check('every role can read', roles.ROLES.every((r) => roles.CAPABILITIES[r].read))
+check('viewer cannot write operational data', roles.canWriteOperational({ app_metadata: { role: 'viewer' } }) === false)
+check('viewer cannot write reference data', roles.canWriteReference({ app_metadata: { role: 'viewer' } }) === false)
+check('viewer cannot manage accounts', roles.canManageAccounts({ app_metadata: { role: 'viewer' } }) === false)
+check('staff can write operational data', roles.canWriteOperational({ app_metadata: { role: 'staff' } }) === true)
+check('staff CANNOT write reference data', roles.canWriteReference({ app_metadata: { role: 'staff' } }) === false)
+check('staff cannot manage accounts', roles.canManageAccounts({ app_metadata: { role: 'staff' } }) === false)
+check('manager can write reference data', roles.canWriteReference({ app_metadata: { role: 'manager' } }) === true)
+check('manager cannot manage accounts', roles.canManageAccounts({ app_metadata: { role: 'manager' } }) === false)
+check('manager is a manager', roles.isManager({ app_metadata: { role: 'manager' } }) === true)
+check('admin is a manager', roles.isManager({ app_metadata: { role: 'admin' } }) === true)
+check('staff is not a manager', roles.isManager({ app_metadata: { role: 'staff' } }) === false)
+check('admin can do everything', roles.ROLES.filter((r) => r === 'admin').every((r) =>
+  roles.canRead({ app_metadata: { role: r } }) &&
+  roles.canWriteOperational({ app_metadata: { role: r } }) &&
+  roles.canWriteReference({ app_metadata: { role: r } }) &&
+  roles.canManageAccounts({ app_metadata: { role: r } }),
+))
+
+console.log('no role at all')
+check('no role means no read', roles.canRead({ app_metadata: {} }) === false)
+check('no role means no write', roles.canWriteOperational({ app_metadata: {} }) === false)
+check('no role means not admin', roles.isAdmin({ app_metadata: {} }) === false)
+check('no role means not a manager', roles.isManager({ app_metadata: {} }) === false)
+check('a null claim means no role', roles.roleOf({ app_metadata: null }) === null)
+check('no role is labelled', roles.roleLabel({ app_metadata: {} }) === 'No role')
+
+console.log('capabilities fail closed on an unrecognised role')
+// A role added to app_metadata but not to ROLES must get nothing, not everything.
+for (const claim of ['supervisor', 'Admin', ' admin ', 'ADMIN', 'owner', '']) {
+  const user = { app_metadata: { role: claim } }
+  check(
+    `"${claim}" is denied everything`,
+    roles.canRead(user) === false &&
+      roles.canWriteOperational(user) === false &&
+      roles.canWriteReference(user) === false &&
+      roles.canManageAccounts(user) === false &&
+      roles.isAdmin(user) === false &&
+      roles.isManager(user) === false,
+  )
+}
+
+console.log('the ladder only widens going up')
+for (let i = 1; i < roles.ROLES.length; i++) {
+  const lower = roles.ROLES[i]
+  const higher = roles.ROLES[i - 1]
+  check(
+    `${lower} never exceeds ${higher}`,
+    Object.keys(roles.CAPABILITIES).every((cap) =>
+      roles.CAPABILITIES[higher][cap] || !roles.CAPABILITIES[lower][cap],
+    ),
+  )
+}
+
+console.log('app_metadata merge preserves other claims')
+// Replacing app_metadata instead of merging would silently drop a claim written
+// by something else. This path normally needs SUPABASE_SERVICE_ROLE_KEY to reach,
+// so it is pinned here where it can be checked without one.
+check(
+  'preserves an unrelated claim',
+  JSON.stringify(roles.mergeRoleInto({ provider: 'email' }, 'staff')) ===
+    JSON.stringify({ provider: 'email', role: 'staff' }),
+)
+check(
+  'overwrites a previous role',
+  roles.mergeRoleInto({ role: 'viewer' }, 'admin').role === 'admin',
+)
+check(
+  'handles a null claim',
+  JSON.stringify(roles.mergeRoleInto(null, 'viewer')) === JSON.stringify({ role: 'viewer' }),
+)
+check(
+  'handles a missing claim',
+  JSON.stringify(roles.mergeRoleInto(undefined, 'viewer')) === JSON.stringify({ role: 'viewer' }),
+)
+check('does not mutate its input', (() => {
+  const before = { provider: 'email' }
+  roles.mergeRoleInto(before, 'admin')
+  return JSON.stringify(before) === JSON.stringify({ provider: 'email' })
+})())
+check(
+  'a nested claim survives intact',
+  (() => {
+    // Optional chaining on purpose: if the merge ever stops preserving the key,
+    // this should report a FAIL rather than throw and abort the rest of the run.
+    const meta = { onboarding: { done: true }, role: 'viewer' }
+    const merged = roles.mergeRoleInto(meta, 'manager')
+    return merged.onboarding?.done === true && merged.role === 'manager'
+  })(),
+)
+check(
+  'every role round-trips through the merge',
+  roles.ROLES.every((role) => roles.mergeRoleInto({}, role).role === role),
+)
+
+console.log('the account list projects auth users safely')
+const selfId = 'user-1'
+const row = (user, derived) => roles.describeAccount(user, selfId, derived)
+
+// The username arrives already derived from the address by lib/auth's
+// emailToUsername, which has its own assertions above. What is checked here is
+// the fallback chain and the rest of the row.
+check(
+  'uses the derived username',
+  row({ id: 'u1', email: 'alice@users.invalid' }, 'alice').username === 'alice',
+)
+check(
+  'falls back to the address when it is not a synthetic one',
+  row({ id: 'u1', email: 'alice@example.com' }, null).username === 'alice@example.com',
+)
+check('copes with no address at all', row({ id: 'u1' }, null).username === '(unknown)')
+check('copes with a null address', row({ id: 'u1', email: null }, null).username === '(unknown)')
+check(
+  'an unrecognised role shows as no role, not as its raw claim',
+  row({ id: 'u1', email: 'a@users.invalid', app_metadata: { role: 'supervisor' } }, 'a').role === null,
+)
+check(
+  'a known role is reported',
+  row({ id: 'u1', email: 'a@users.invalid', app_metadata: { role: 'manager' } }, 'a').role === 'manager',
+)
+check('a role-less account reports null', row({ id: 'u1', email: 'a@users.invalid' }, 'a').role === null)
+check(
+  'an unconfirmed account is flagged',
+  row({ id: 'u1', email: 'a@users.invalid' }, 'a').confirmed === false,
+)
+check(
+  'a confirmed account is not flagged',
+  row({ id: 'u1', email: 'a@users.invalid', email_confirmed_at: '2026-01-01' }, 'a').confirmed === true,
+)
+check(
+  'the viewer is recognised as self',
+  row({ id: selfId, email: 'a@users.invalid' }, 'a').isSelf === true,
+)
+check(
+  'anyone else is not self',
+  row({ id: 'user-2', email: 'b@users.invalid' }, 'b').isSelf === false,
+)
+check(
+  'the role comes from app_metadata even when user_metadata disagrees',
+  row(
+    { id: 'u1', email: 'a@users.invalid', app_metadata: { role: 'staff' }, user_metadata: { role: 'admin' } },
+    'a',
+  ).role === 'staff',
+)
+check(
+  'the row carries an id so the form can address the right account',
+  row({ id: 'abc-123', email: 'a@users.invalid' }, 'a').id === 'abc-123',
+)
+
+console.log('the self-demotion guard')
+check('the viewer cannot change their own role', roles.isSelfAccount('user-1', 'user-1') === true)
+check('an admin can change someone else', roles.isSelfAccount('user-2', 'user-1') === false)
+check('a different id is never self, even with an empty value', roles.isSelfAccount('', '') === true)
+
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

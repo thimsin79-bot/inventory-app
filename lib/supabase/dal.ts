@@ -4,7 +4,13 @@ import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseEnvProblems } from '@/lib/supabase/env'
 import { emailToUsername } from '@/lib/auth'
-import { isAdmin } from '@/lib/roles'
+import {
+  CAPABILITIES,
+  canManageAccounts,
+  isManager,
+  roleOf,
+  type Capabilities,
+} from '@/lib/roles'
 
 /**
  * Data access layer for the current session.
@@ -50,14 +56,39 @@ export async function requireUser(): Promise<User> {
  *
  * Only for server-side authorization ahead of a Service Role call. The service
  * role bypasses RLS, so this check is the entire access control for that path.
- * The predicate itself lives in lib/roles.ts, where it is unit tested.
+ * The predicates themselves live in lib/roles.ts, where they are unit tested.
  */
 export async function requireAdmin(): Promise<User> {
   const user = await requireUser()
 
-  if (!isAdmin(user)) redirect('/')
+  if (!canManageAccounts(user)) redirect('/')
 
   return user
+}
+
+/**
+ * Throws unless the session belongs to a manager or an admin.
+ *
+ * Distinct from `requireAdmin`, and deliberately so: account management is
+ * admin-only even though managers otherwise hold every data capability, so
+ * "has write access" must never be the same question as "can reset anyone's
+ * password".
+ */
+export async function requireManager(): Promise<User> {
+  const user = await requireUser()
+
+  if (!isManager(user)) redirect('/')
+
+  return user
+}
+
+/** The session's capabilities, for a page that renders differently per role. */
+export function capabilitiesOf(user: User): Capabilities {
+  const role = roleOf(user)
+
+  return role
+    ? CAPABILITIES[role]
+    : { read: false, writeOperational: false, writeReference: false, manageAccounts: false }
 }
 
 export function displayName(user: User): string {

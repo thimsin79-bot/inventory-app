@@ -51,8 +51,17 @@ never sign in.
 
 Run `supabase/schema.sql` in the Supabase SQL Editor, then `supabase/seed.sql` for sample data.
 
-Policies are gated on a role claim in `raw_app_meta_data`, so an account with no role sees
-nothing. Assign one per user:
+Policies are gated on a role claim in `raw_app_meta_data`, so an account with no role sees nothing
+at all. There are four roles:
+
+| Role | Can do |
+| --- | --- |
+| `viewer` | read everything, change nothing |
+| `staff` | plus record movements, requests, audits and purchases |
+| `manager` | plus edit categories, warehouses, suppliers and departments |
+| `admin` | plus manage accounts and reset passwords |
+
+Assign a role by hand:
 
 ```sql
 UPDATE auth.users
@@ -63,8 +72,22 @@ WHERE email = 'alice@users.invalid';
 Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
 claim is issued into their JWT at token creation.
 
-Disable open sign-up under Authentication → Sign In / Providers once your accounts exist.
-Otherwise anyone can register, though a role-less account still matches no policy.
+`/admin/users` does the same thing through a form, and also resets forgotten passwords. Both need
+`SUPABASE_SERVICE_ROLE_KEY`, which bypasses row-level security — that is why the page checks for the
+admin role before the service-role client is ever constructed.
+
+Keep open sign-up **enabled** under Authentication → Sign In / Providers. This app has no invite
+flow and no mailbox, so public sign-up is the only way to create an account; with it off nobody can
+register at all.
+
+**A new signup starts with no role.** Sign-up runs on the anon key, which cannot write
+`app_metadata`, so the account matches no policy until an admin assigns a role. That is harmless —
+it sees no rows — and the app says so explicitly rather than showing empty screens, since an
+unexplained blank app is indistinguishable from a broken one. Until then there is nothing to reach,
+so the nav is hidden as well.
+
+Run `npm run check` before deploying. `check:rls` diffs the policy matrix in `supabase/schema.sql`
+against the role model in `lib/roles.ts` and fails if they drift.
 
 ## Deploying to Vercel
 

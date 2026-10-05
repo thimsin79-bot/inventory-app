@@ -40,9 +40,12 @@ export function Button({ variant = 'secondary', size = 'md', className = '', ...
   )
 }
 
-export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+export function Label({ children, htmlFor, className = '' }: { children: ReactNode; htmlFor?: string; className?: string }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+    <label
+      htmlFor={htmlFor}
+      className={`mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400 ${className}`}
+    >
       {children}
     </label>
   )

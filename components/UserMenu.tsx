@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { signOut } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/SubmitButton'
 import { displayName, getUser } from '@/lib/supabase/dal'
-import { isAdmin } from '@/lib/roles'
+import { canManageAccounts, roleLabel } from '@/lib/roles'
 
 /**
  * Shell footer for the signed-in user.
@@ -26,7 +26,14 @@ export async function UserMenu() {
         {displayName(user)}
       </p>
 
-      {isAdmin(user) && (
+      {/* Shown so a user can tell a misconfigured role from a bug: "No role" is
+          a real state, and it means the account matches no RLS policy and sees
+          empty tables. */}
+      <p className="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">
+        {roleLabel(user)}
+      </p>
+
+      {canManageAccounts(user) && (
         <Link
           href="/admin/users"
           className="mt-1 block text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"

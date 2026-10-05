@@ -25,6 +25,7 @@ import {
   type ItemFormState,
 } from '@/components/ItemFormFields'
 import { MovementForm } from '@/components/MovementForm'
+import { usePermissions } from '@/components/Permissions'
 
 type ItemRow = Tables<'items'> & {
   category: Tables<'categories'> | null
@@ -32,6 +33,7 @@ type ItemRow = Tables<'items'> & {
 }
 
 export default function InventoryPage() {
+  const { writeOperational } = usePermissions()
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
   const [notice, setNotice] = useState<string | null>(null)
@@ -143,7 +145,10 @@ export default function InventoryPage() {
     { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{Number(r.cost).toFixed(2)}</span> },
     { key: 'price', header: 'Price', render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-    {
+  ]
+
+  if (writeOperational) {
+    columns.push({
       key: 'actions',
       header: '',
       className: 'text-right',
@@ -160,8 +165,8 @@ export default function InventoryPage() {
           </Button>
         </div>
       ),
-    },
-  ]
+    })
+  }
 
   return (
     <>
@@ -190,9 +195,11 @@ export default function InventoryPage() {
                 </option>
               ))}
             </select>
-            <Button variant="primary" onClick={openCreate}>
-              New item
-            </Button>
+            {writeOperational && (
+              <Button variant="primary" onClick={openCreate}>
+                New item
+              </Button>
+            )}
           </>
         }
       />

@@ -10,12 +10,14 @@ import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
+import { usePermissions } from '@/components/Permissions'
 
 type Row = Tables<'requests'>
 
 const NEXT_STATUSES = ['Approved', 'Rejected', 'Issued', 'Returned'] as const
 
 export default function RequestsPage() {
+  const { writeOperational } = usePermissions()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -74,7 +76,10 @@ export default function RequestsPage() {
     { key: 'qty', header: 'Qty', render: (r) => <span className="tabular-nums">{r.qty}</span> },
     { key: 'by', header: 'Requested by', render: (r) => r.requested_by },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
-    {
+  ]
+
+  if (writeOperational) {
+    columns.push({
       key: 'actions',
       header: '',
       className: 'text-right',
@@ -87,8 +92,8 @@ export default function RequestsPage() {
           ))}
         </div>
       ),
-    },
-  ]
+    })
+  }
 
   return (
     <>
@@ -96,9 +101,11 @@ export default function RequestsPage() {
         title="Requests"
         description="Requisitions raised by departments."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-            New request
-          </Button>
+          writeOperational ? (
+            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+              New request
+            </Button>
+          ) : undefined
         }
       />
 

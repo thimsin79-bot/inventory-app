@@ -16,6 +16,7 @@ const INVALID_CREDENTIALS = /invalid login credentials/i
 const EMAIL_TAKEN = /already (registered|been registered)|user already exists/i
 const NOT_CONFIRMED = /email not confirmed/i
 const RATE_LIMITED = /rate limit|too many|security purposes/i
+const SIGNUP_DISABLED = /signups not allowed for this instance/i
 
 type AuthErrorLike = { status?: number; message: string; code?: string }
 
@@ -38,6 +39,21 @@ function unconfirmedMessage(): string {
 
 function isUnconfirmed(error: AuthErrorLike): boolean {
   return error.code === 'email_not_confirmed' || NOT_CONFIRMED.test(error.message)
+}
+
+/**
+ * Sign-up is the only route to an account here. There is no invite flow and no
+ * mailbox to send one to, so a project with sign-up switched off cannot onboard
+ * anybody at all. GoTrue answers `422 signup_disabled`, which without this branch
+ * reached the user verbatim as "Signups not allowed for this instance" — true, but
+ * it names a Supabase concept rather than the switch an operator has to flip.
+ */
+function isSignupDisabled(error: AuthErrorLike): boolean {
+  return error.code === 'signup_disabled' || SIGNUP_DISABLED.test(error.message)
+}
+
+function signupDisabledMessage(): string {
+  return 'This instance is not accepting new accounts. Sign-up has to be switched back on under Authentication → Sign In / Providers → Email before anyone can register.'
 }
 
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -108,6 +124,10 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
   })
 
   if (error) {
+    if (isSignupDisabled(error)) {
+      return { error: signupDisabledMessage(), username }
+    }
+
     return {
       error: EMAIL_TAKEN.test(error.message)
         ? 'That username is already taken. Try another one, or sign in.'
