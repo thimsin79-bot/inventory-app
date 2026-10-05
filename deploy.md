@@ -108,6 +108,30 @@ npx vercel ls
 npx vercel inspect <deployment-url>
 ```
 
+### What `vercel.json` sets
+
+The repo pins only what is worth pinning. Anything left to Vercel's autodetection stays that
+way, so a dashboard override cannot drift away from the repository.
+
+| Key | Value | Why |
+| --- | --- | --- |
+| `framework` | `nextjs` | Explicit, so a renamed repo cannot be misdetected as a static site |
+| `regions` | `["syd1"]` | Sydney (`ap-southeast-2`), the same region as the Supabase project. Vercel defaults to `iad1` (Washington, D.C.), which puts every function call a continent away from the database. Vercel's own guidance is to run functions in the same region as the database |
+| `headers` | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` | Baseline hardening; the app embeds nothing and makes no cross-origin reads |
+
+Deliberately **not** set:
+
+- `buildCommand` / `installCommand` / `outputDirectory`. These are detected correctly, and pinning
+  them means a later change to `package.json` gets silently overridden.
+- `proxy`. Next.js 16 auto-detects the root `proxy.ts`; the build output confirms
+  `ƒ Proxy (Middleware)`.
+- `cleanUrls` / `trailingSlash`. Handled by Next.js routing.
+- A Content-Security-Policy. Next.js hydration emits inline scripts and the browser Supabase
+  client needs `connect-src` pointed at whichever project URL is configured, so a static CSP in
+  `vercel.json` would break the app. Add one only if you template it from the env var.
+
+Changing `regions` takes effect on the next deployment, and only for new deployments.
+
 ## 5. Verify a release
 
 Run these locally before pushing:
