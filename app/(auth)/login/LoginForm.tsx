@@ -4,18 +4,11 @@ import Link from 'next/link'
 import { useActionState } from 'react'
 import { Input, Label } from '@/components/ui'
 import { SubmitButton } from '@/components/SubmitButton'
-import { login, resendConfirmation } from '@/app/actions/auth'
-import type { AuthState } from '@/lib/auth'
+import { login } from '@/app/actions/auth'
+import { MAX_USERNAME_LENGTH, MIN_USERNAME_LENGTH, type AuthState } from '@/lib/auth'
 
 export function LoginForm({ nextPath }: { nextPath: string }) {
   const [state, formAction] = useActionState<AuthState, FormData>(login, {})
-  const [resendState, resendAction] = useActionState<AuthState, FormData>(
-    resendConfirmation,
-    {},
-  )
-
-  const resendEmail = resendState.email ?? state.email ?? ''
-  const showResend = state.needsConfirmation === true || resendState.email !== undefined
 
   return (
     <div className="space-y-4">
@@ -23,13 +16,18 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         <input type="hidden" name="next" value={nextPath} />
 
         <div>
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="username">Username</Label>
           <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            defaultValue={state.email ?? ''}
+            id="username"
+            name="username"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            minLength={MIN_USERNAME_LENGTH}
+            maxLength={MAX_USERNAME_LENGTH}
+            defaultValue={state.username ?? ''}
             required
             autoFocus
           />
@@ -59,35 +57,6 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           Sign in
         </SubmitButton>
       </form>
-
-      {showResend && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
-          <p className="text-sm text-amber-900 dark:text-amber-200">
-            Confirmation links can expire or land in spam.
-          </p>
-
-          <form action={resendAction} className="mt-3 space-y-3">
-            <input type="hidden" name="next" value={nextPath} />
-            <input type="hidden" name="email" value={resendEmail} />
-
-            <SubmitButton variant="secondary" className="w-full">
-              Resend confirmation email
-            </SubmitButton>
-          </form>
-
-          {resendState.error && (
-            <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">
-              {resendState.error}
-            </p>
-          )}
-
-          {resendState.message && (
-            <p role="status" className="mt-2 text-sm text-emerald-800 dark:text-emerald-300">
-              {resendState.message}
-            </p>
-          )}
-        </div>
-      )}
 
       <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
         No account yet?{' '}

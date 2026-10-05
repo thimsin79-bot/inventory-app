@@ -56,14 +56,33 @@ Under **Authentication → URL Configuration**:
 
 Under **Authentication → Sign In / Providers**:
 
-- **Confirm email**. With this on, every new account must click an emailed link before it can
-  sign in. Leave it on for production and attach real SMTP; turn it off only for local work.
+- **Confirm email: off.** Accounts here have no mailbox — the login form takes a username, which is
+  mapped internally to `<username>@users.invalid`, and `.invalid` never resolves. If confirmation is
+  on, a new account is created that can never sign in, because the link cannot be delivered. The
+  signup form detects this and says so rather than dead-ending.
 - Disable open sign-up once your accounts exist.
 
-Under **Authentication → Email**:
+### No email is involved
 
-- Attach a real SMTP provider. The built-in mailer is rate-limited, so signups silently fail to
-  deliver and nobody can ever confirm.
+Sign-up and sign-in are username and password only. Supabase's password grant still requires an
+email-shaped identity, so `lib/auth.ts` maps the username onto the reserved `.invalid` TLD. Nothing is
+ever emailed, and no address belongs to a real party.
+
+Two consequences follow, both intentional:
+
+- **No password reset and no email confirmation.** There is no mailbox to send either to. A forgotten
+  password has to be reset by an administrator.
+- **An existing account created with a real email address can no longer sign in.** The form only ever
+  sends `<username>@users.invalid`, so an account whose address is `alice@gmail.com` is unreachable
+  through the UI. Migrate it by renaming its address to the synthetic form:
+
+  ```sql
+  UPDATE auth.users SET email = 'alice@users.invalid' WHERE email = 'alice@gmail.com';
+  ```
+
+  Renaming frees the real address again but does **not** move the user across — they then sign up
+  again with the username `alice`, which creates a second account. Delete the old row first if that
+  is what you want.
 
 ### Granting a role
 
@@ -73,7 +92,7 @@ policy and sees empty tables. Assign one per user:
 ```sql
 UPDATE auth.users
 SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
-WHERE email = 'you@example.com';
+WHERE email = 'alice@users.invalid';
 ```
 
 Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
@@ -156,22 +175,32 @@ Checklist:
 - `/login` returns `200` and renders the form.
 - `/api/supabase-test` returns `"status":"ready"`. `connected_with_schema_missing` means the env
   vars are wrong or `supabase/schema.sql` was never applied.
-- Sign in with a confirmed account and load `/inventory`. Rows present means the session and RLS
-  are both working.
+- Sign in with a known account and load `/inventory`. Rows present means the session and RLS are
+  both working.
 
 ## 6. Troubleshooting
 
-**Sign-in fails with "That email and password combination is not valid" but the password is
-correct.** The account exists and is unconfirmed. GoTrue returns HTTP `400` with code
-`email_not_confirmed`, which is the same status used for bad credentials; the login action
-branches on the code so this case now reports itself. Confirm the account, use the resend button
-on `/login`, or turn off **Confirm email** for local work.
+**"Account created, but it cannot sign in yet."** Supabase still has **Confirm email** enabled, so
+`signUp` returned no session and the account can never be confirmed — there is no mailbox. Turn
+**Confirm email** off under Authentication → Sign In / Providers.
 
-**Confirmation email never arrives.** No SMTP provider is attached, or the built-in rate limit
-was hit. Attach SMTP under Authentication → Email.
+**Sign-in says the account is "waiting to be approved".** The same cause, reached later: the account
+was created while confirmation was on. Clearing the flag does not retroactively confirm it, so either
+flip the setting and re-register, or confirm it directly:
 
-**Confirmation link 404s.** The deployment origin is missing from Redirect URLs, so Supabase
-redirects to the Site URL instead. See step 3.
+```sql
+UPDATE auth.users SET email_confirmed_at = now()
+WHERE email = 'alice@users.invalid' AND email_confirmed_at IS NULL;
+```
+
+**An account that used to work now returns "not valid".** It was created with a real email address,
+which the username-only form can never produce. See *No email is involved* in step 3 for the
+migration.
+
+**Sign-in says "That username and password combination is not valid" but the password is
+right.** GoTrue returns HTTP `400` for both bad credentials and an unconfirmed account, so the
+action branches on the `email_not_confirmed` code and reports the unconfirmed case separately.
+`Alice` and `alice` are the same account: usernames are case-folded before they are used.
 
 **Everything renders but every table is empty.** The signed-in account has no role claim. See
 the `UPDATE auth.users` snippet in step 3.

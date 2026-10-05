@@ -1,18 +1,76 @@
 export type AuthState = {
   error?: string
   message?: string
-  email?: string
-  name?: string
-  /** Set when sign-in failed only because the email address is unconfirmed. */
-  needsConfirmation?: boolean
+  username?: string
 }
 
+/**
+ * Accounts are identified by username, not by email address.
+ *
+ * Supabase Auth's password grant only accepts an email or a phone number, so a
+ * username is mapped to an address inside the RFC 2606 `.invalid` TLD. That TLD is
+ * reserved and by definition never resolves, so nothing can be delivered to it and
+ * no address ever leaks to a real party. Nothing is ever sent by email.
+ *
+ * `users.invalid` is not interchangeable with a real mail provider: these accounts
+ * cannot receive mail, which is why there is no confirmation or password-reset flow.
+ */
+export const USERNAME_DOMAIN = 'users.invalid'
+
 export const MIN_PASSWORD_LENGTH = 8
+export const MIN_USERNAME_LENGTH = 3
+export const MAX_USERNAME_LENGTH = 32
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/**
+ * Applied after normalisation, so it only ever sees lowercase. Forbidding `@`
+ * here is what stops a crafted username from escaping the synthetic domain.
+ */
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
 
-export function isEmail(value: string): boolean {
-  return EMAIL_PATTERN.test(value)
+/**
+ * Case-folds the username. Without this, `Alice` and `alice` would register as two
+ * separate accounts with two separate passwords, which is an impersonation hole
+ * rather than a cosmetic issue.
+ */
+export function normalizeUsername(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+export function usernameProblem(value: string): string | null {
+  const username = normalizeUsername(value)
+
+  if (username.length < MIN_USERNAME_LENGTH) {
+    return `be at least ${MIN_USERNAME_LENGTH} characters`
+  }
+
+  if (username.length > MAX_USERNAME_LENGTH) {
+    return `be at most ${MAX_USERNAME_LENGTH} characters`
+  }
+
+  if (!USERNAME_PATTERN.test(username)) {
+    return 'use only letters, numbers, dots, dashes, and underscores'
+  }
+
+  return null
+}
+
+export function usernameToEmail(username: string): string {
+  return `${normalizeUsername(username)}@${USERNAME_DOMAIN}`
+}
+
+/** Inverse of {@link usernameToEmail}, for display. Null for any other address. */
+export function emailToUsername(email: string | null | undefined): string | null {
+  if (!email) return null
+
+  const suffix = `@${USERNAME_DOMAIN}`
+  if (!email.toLowerCase().endsWith(suffix)) return null
+
+  const username = email.slice(0, -suffix.length).toLowerCase()
+
+  // Having our domain is not enough on its own. Re-checking the local part means a
+  // crafted address like `x@evil.com@users.invalid` yields nothing rather than a
+  // bogus name to render.
+  return USERNAME_PATTERN.test(username) ? username : null
 }
 
 /**

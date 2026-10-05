@@ -5,7 +5,12 @@ import { useActionState } from 'react'
 import { Input, Label } from '@/components/ui'
 import { SubmitButton } from '@/components/SubmitButton'
 import { signup } from '@/app/actions/auth'
-import { MIN_PASSWORD_LENGTH, type AuthState } from '@/lib/auth'
+import {
+  MAX_USERNAME_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  MIN_USERNAME_LENGTH,
+  type AuthState,
+} from '@/lib/auth'
 
 export function SignupForm({ nextPath }: { nextPath: string }) {
   const [state, formAction] = useActionState<AuthState, FormData>(signup, {})
@@ -15,7 +20,7 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
       <div className="space-y-4">
         <p
           role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
         >
           {state.message}
         </p>
@@ -34,27 +39,25 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
       <input type="hidden" name="next" value={nextPath} />
 
       <div>
-        <Label htmlFor="name">Full name</Label>
+        <Label htmlFor="username">Username</Label>
         <Input
-          id="name"
-          name="name"
-          autoComplete="name"
-          defaultValue={state.name ?? ''}
+          id="username"
+          name="username"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          minLength={MIN_USERNAME_LENGTH}
+          maxLength={MAX_USERNAME_LENGTH}
+          defaultValue={state.username ?? ''}
           required
           autoFocus
         />
-      </div>
-
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          defaultValue={state.email ?? ''}
-          required
-        />
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Letters, numbers, dots, dashes, and underscores. This is your sign-in name —
+          there is no email address involved.
+        </p>
       </div>
 
       <div>
@@ -79,6 +82,7 @@ export function SignupForm({ nextPath }: { nextPath: string }) {
           name="confirmPassword"
           type="password"
           autoComplete="new-password"
+          minLength={MIN_PASSWORD_LENGTH}
           required
         />
       </div>

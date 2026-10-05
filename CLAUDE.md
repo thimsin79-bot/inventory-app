@@ -46,16 +46,28 @@ Note: earlier notes in this file described `components/ui/`, `components/layout/
 
 ---
 
-## 3. Authentication (added October 4, 2026)
+## 3. Authentication
 
-Supabase email/password with **public sign-up** (the user chose self-registration over admin-provisioned accounts).
+Username + password with **public sign-up** (self-registration over admin-provisioned accounts).
+No email address is collected anywhere.
 
+- Supabase's password grant only accepts an email or phone, so `lib/auth.ts` maps a username onto
+  `<username>@users.invalid`. `.invalid` is reserved by RFC 2606 and never resolves, so nothing can
+  be delivered to it and no address belongs to a real party.
+- Usernames are **case-folded** (`normalizeUsername`) before use. Without it `Alice` and `alice`
+  would be two accounts with two passwords, which is impersonation, not cosmetics. `@` is rejected
+  in the pattern, which is what stops a crafted username escaping the synthetic domain.
+- No email confirmation and no password reset, by consequence of there being no mailbox. A forgotten
+  password is an administrator task. `Confirm email` must be **off** in the project or new accounts
+  are created that can never sign in.
 - `proxy.ts` → `lib/supabase/proxy.ts` refreshes the session cookies, then applies the optimistic route check: unauthenticated → `/login?next=…`, authenticated hitting `/login` or `/signup` → `/`. `PUBLIC_PATHS = /login, /signup, /auth/callback, /api/supabase-test`.
-- `lib/supabase/dal.ts` is the session API: `getUser()` (React `cache` memoized) and `requireUser()` (redirects). Server Components and handlers must read the user here, never `supabase.auth` directly.
-- Server actions `login`, `signup`, `signOut` in `app/actions/auth.ts` use `useActionState`. Passwords require ≥8 characters, a letter, and a number. Errors are mapped for 400 invalid credentials, 422 email-taken, and 429 rate limits.
+- `lib/supabase/dal.ts` is the session API: `getUser()` (React `cache` memoized) and `requireUser()` (redirects). Server Components and handlers must read the user here, never `supabase.auth` directly. `getUser()` returns `null` when Supabase is unconfigured rather than throwing, so `/login` still renders; the proxy fails closed in that state.
+- Server actions `login`, `signup`, `signOut` in `app/actions/auth.ts` use `useActionState`. Passwords require ≥8 characters, a letter, and a number. Errors are mapped for 400 invalid credentials, 422 username-taken, 429 rate limits, and `email_not_confirmed` (reported as "waiting to be approved", not as a wrong password).
+- Sign-up writes `user_metadata.username` only. `app_metadata` carries the role RLS reads and must never be settable from a public form.
 - Sign-out is `<form action={signOut}>` inside `components/UserMenu.tsx`, wrapped in `<Suspense>` in the `(app)` layout so `cookies()` does not hold back the first chunk.
-- Project auth config: `disable_signup: false`, `mailer_autoconfirm: false` → **every new user must confirm by email before first login**. Anonymous sign-ins are off.
+- Project auth config: `disable_signup: false`, `mailer_autoconfirm: true` → sign-in works immediately. Anonymous sign-ins are off.
 - Layering rule: layouts do not re-render on client navigation, so the proxy is the redirect gate and RLS is the data gate.
+- Guards: `npm run check:auth` (username mapping, case folding, redirect guard) and `npm run check:env` (deployment env validation). Both are dependency-free Node scripts.
 
 ---
 

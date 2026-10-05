@@ -36,6 +36,16 @@ Vercel project's environment settings or every server-rendered page will fail.
 The publishable key is designed to be public and ships in the client bundle. It is not a secret;
 row level security is what protects your data.
 
+## Accounts
+
+Sign-up and sign-in take a **username and password only**. There is no email address and nothing is
+ever emailed. Supabase still requires an email-shaped identity, so the username is mapped internally
+to `<username>@users.invalid` — a reserved TLD that can never receive mail.
+
+That means no email confirmation and no password reset; a forgotten password is an administrator
+task. **Confirm email must be off** under Authentication → Sign In / Providers, or new accounts are
+created that can never sign in.
+
 ## Database setup
 
 Run `supabase/schema.sql` in the Supabase SQL Editor, then `supabase/seed.sql` for sample data.
@@ -46,7 +56,7 @@ nothing. Assign one per user:
 ```sql
 UPDATE auth.users
 SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
-WHERE email = 'you@example.com';
+WHERE email = 'alice@users.invalid';
 ```
 
 Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
@@ -58,7 +68,7 @@ Otherwise anyone can register, though a role-less account still matches no polic
 ## Deploying to Vercel
 
 See [deploy.md](deploy.md) for the full ordered checklist, including the Supabase-side redirect
-and SMTP configuration that a Vercel deploy cannot complete on its own.
+configuration that a Vercel deploy cannot complete on its own.
 
 Push to GitHub, then import the repository at [vercel.com/new](https://vercel.com/new). The
 framework preset, build command (`npm run build`), and output directory are all detected

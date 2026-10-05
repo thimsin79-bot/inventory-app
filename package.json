@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:env": "node scripts/check-supabase-env.mjs"
+    "check:env": "node scripts/check-supabase-env.mjs",
+    "check:auth": "node scripts/check-auth.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

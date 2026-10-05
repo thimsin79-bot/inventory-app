@@ -1,14 +1,20 @@
 'use server'
 
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { unconfiguredErrorMessage } from '@/lib/supabase/env'
-import { isEmail, passwordProblem, safeNextPath, type AuthState } from '@/lib/auth'
+import {
+  normalizeUsername,
+  passwordProblem,
+  safeNextPath,
+  usernameProblem,
+  usernameToEmail,
+  type AuthState,
+} from '@/lib/auth'
 
 const INVALID_CREDENTIALS = /invalid login credentials/i
 const EMAIL_TAKEN = /already (registered|been registered)|user already exists/i
-const EMAIL_NOT_CONFIRMED = /email not confirmed/i
+const NOT_CONFIRMED = /email not confirmed/i
 const RATE_LIMITED = /rate limit|too many|security purposes/i
 
 type AuthErrorLike = { status?: number; message: string; code?: string }
@@ -22,70 +28,50 @@ function friendlyError(error: AuthErrorLike): string {
 }
 
 /**
- * GoTrue reports an unconfirmed account as `email_not_confirmed` with HTTP 400,
- * the same status it uses for bad credentials. Branch on the code first so the
- * real cause reaches the user instead of a misleading "wrong password".
+ * These accounts have no mailbox, so "confirm your email" can never be completed.
+ * When the project still has confirmation enabled, say what is actually blocking
+ * sign-in instead of telling the user to look for a message that will never arrive.
  */
-function isUnconfirmed(error: AuthErrorLike): boolean {
-  return error.code === 'email_not_confirmed' || EMAIL_NOT_CONFIRMED.test(error.message)
+function unconfirmedMessage(): string {
+  return 'This account is still waiting to be approved. Accounts here are created without an email inbox, so there is no confirmation link to click — an administrator has to enable automatic confirmation.'
 }
 
-/**
- * Absolute callback URL for email confirmation links.
- *
- * Falls back to the forwarded protocol + host when the `Origin` header is
- * absent. Returning undefined omits `emailRedirectTo` entirely, which is
- * better than sending a value Supabase would reject.
- */
-async function callbackUrl(nextPath: string): Promise<string | undefined> {
-  const headerList = await headers()
-  const origin = headerList.get('origin')
-
-  if (origin?.startsWith('http')) {
-    return `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
-  }
-
-  const host = headerList.get('x-forwarded-host') ?? headerList.get('host')
-  const protocol = headerList.get('x-forwarded-proto') ?? 'http'
-
-  if (!host) return undefined
-
-  return `${protocol}://${host}/auth/callback?next=${encodeURIComponent(nextPath)}`
+function isUnconfirmed(error: AuthErrorLike): boolean {
+  return error.code === 'email_not_confirmed' || NOT_CONFIRMED.test(error.message)
 }
 
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const email = String(formData.get('email') ?? '').trim()
+  const username = normalizeUsername(String(formData.get('username') ?? ''))
   const password = String(formData.get('password') ?? '')
   const nextPath = safeNextPath(String(formData.get('next') ?? ''))
 
-  if (!isEmail(email) || !password) {
-    return { error: 'Enter your email address and password.', email }
-  }
+  const badUsername = usernameProblem(username)
+  if (badUsername) return { error: `Your username must ${badUsername}.`, username }
+  if (!password) return { error: 'Enter your password.', username }
 
   // Report a missing deployment variable in the form rather than as a redacted
   // 500, which is the whole point of the check in lib/supabase/env.ts.
   const unconfigured = unconfiguredErrorMessage()
-  if (unconfigured) return { error: unconfigured, email }
+  if (unconfigured) return { error: unconfigured, username }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: usernameToEmail(username),
+    password,
+  })
 
   if (error) {
     if (isUnconfirmed(error)) {
-      return {
-        error:
-          'This account has not confirmed its email address yet. Open the confirmation link we sent you, or resend it below.',
-        email,
-        needsConfirmation: true,
-      }
+      return { error: unconfirmedMessage(), username }
     }
 
     return {
       error:
         error.status === 400 || INVALID_CREDENTIALS.test(error.message)
-          ? 'That email and password combination is not valid.'
+          ? 'That username and password combination is not valid.'
           : friendlyError(error),
-      email,
+      username,
     }
   }
 
@@ -93,99 +79,54 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
 }
 
 export async function signup(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const name = String(formData.get('name') ?? '').trim()
-  const email = String(formData.get('email') ?? '').trim()
+  const username = normalizeUsername(String(formData.get('username') ?? ''))
   const password = String(formData.get('password') ?? '')
   const confirmPassword = String(formData.get('confirmPassword') ?? '')
   const nextPath = safeNextPath(String(formData.get('next') ?? ''))
 
-  if (name.length < 2) {
-    return { error: 'Enter your full name.', name, email }
-  }
-
-  if (!isEmail(email)) {
-    return { error: 'Enter a valid email address.', name, email }
-  }
+  const badUsername = usernameProblem(username)
+  if (badUsername) return { error: `Your username must ${badUsername}.`, username }
 
   const weak = passwordProblem(password)
-
-  if (weak) {
-    return { error: `Your password must ${weak}.`, name, email }
-  }
+  if (weak) return { error: `Your password must ${weak}.`, username }
 
   if (password !== confirmPassword) {
-    return { error: 'The two passwords do not match.', name, email }
+    return { error: 'The two passwords do not match.', username }
   }
 
   const unconfigured = unconfiguredErrorMessage()
-  if (unconfigured) return { error: unconfigured, name, email }
+  if (unconfigured) return { error: unconfigured, username }
 
   const supabase = await createClient()
+
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: usernameToEmail(username),
     password,
-    options: {
-      data: { full_name: name },
-      emailRedirectTo: await callbackUrl(nextPath),
-    },
+    // user_metadata only. app_metadata carries the role that RLS reads and is
+    // admin-controlled, so it must never be settable from a public form.
+    options: { data: { username } },
   })
 
   if (error) {
     return {
       error: EMAIL_TAKEN.test(error.message)
-        ? 'An account with that email already exists. Sign in instead.'
+        ? 'That username is already taken. Try another one, or sign in.'
         : friendlyError(error),
-      name,
-      email,
+      username,
     }
   }
 
   if (!data.session) {
+    // No session means the project still requires email confirmation, which these
+    // accounts can never satisfy. Point at the actual switch rather than dead-ending.
     return {
-      message: 'Account created. Check your inbox for the confirmation link, then sign in.',
-      name,
-      email,
+      message:
+        'Account created, but it cannot sign in yet. Automatic confirmation has to be switched on (Authentication → Email) before a username account can be used.',
+      username,
     }
   }
 
   redirect(nextPath)
-}
-
-export async function resendConfirmation(
-  _prev: AuthState,
-  formData: FormData,
-): Promise<AuthState> {
-  const email = String(formData.get('email') ?? '').trim()
-  const nextPath = safeNextPath(String(formData.get('next') ?? ''))
-
-  if (!isEmail(email)) {
-    return { error: 'Enter your email address.', email }
-  }
-
-  const unconfigured = unconfiguredErrorMessage()
-  if (unconfigured) return { error: unconfigured, email, needsConfirmation: true }
-
-  const supabase = await createClient()
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email,
-    options: { emailRedirectTo: await callbackUrl(nextPath) },
-  })
-
-  if (error) {
-    return {
-      error: RATE_LIMITED.test(error.message)
-        ? 'Too many resend requests. Wait a minute and try again.'
-        : friendlyError(error),
-      email,
-      needsConfirmation: true,
-    }
-  }
-
-  return {
-    message: `Confirmation link sent to ${email}. Open it to finish setting up your account.`,
-    email,
-  }
 }
 
 export async function signOut(): Promise<void> {

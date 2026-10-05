@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseEnvProblems } from '@/lib/supabase/env'
+import { emailToUsername } from '@/lib/auth'
 
 /**
  * Data access layer for the current session.
@@ -44,7 +45,18 @@ export async function requireUser(): Promise<User> {
 }
 
 export function displayName(user: User): string {
-  const meta = user.user_metadata as { full_name?: string; name?: string } | null
+  const meta = user.user_metadata as
+    | { username?: string; full_name?: string; name?: string }
+    | null
 
-  return meta?.full_name ?? meta?.name ?? user.email ?? 'Signed in'
+  // Prefer the username, so the UI never renders the synthetic @users.invalid
+  // address that stands in for one behind the scenes.
+  return (
+    meta?.username ??
+    meta?.full_name ??
+    meta?.name ??
+    emailToUsername(user.email) ??
+    user.email ??
+    'Signed in'
+  )
 }
