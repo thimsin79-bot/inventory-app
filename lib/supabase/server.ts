@@ -1,19 +1,21 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/database.types'
+import { readSupabaseEnv } from '@/lib/supabase/env'
 
 /**
  * Creates a Supabase client configured for Server Components,
  * Server Actions, and Route Handlers.
  * Uses Next.js async cookies() API.
+ *
+ * Throws a named error when the environment is incomplete, rather than passing
+ * `undefined` to the SDK and failing somewhere inside it.
  */
 export async function createClient() {
   const cookieStore = await cookies()
+  const { url, key } = readSupabaseEnv()
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+  return createServerClient<Database>(url, key, {
     cookies: {
       getAll() {
         return cookieStore.getAll()

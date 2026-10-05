@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { unconfiguredErrorMessage } from '@/lib/supabase/env'
 import { isEmail, passwordProblem, safeNextPath, type AuthState } from '@/lib/auth'
 
 const INVALID_CREDENTIALS = /invalid login credentials/i
@@ -61,6 +62,11 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
     return { error: 'Enter your email address and password.', email }
   }
 
+  // Report a missing deployment variable in the form rather than as a redacted
+  // 500, which is the whole point of the check in lib/supabase/env.ts.
+  const unconfigured = unconfiguredErrorMessage()
+  if (unconfigured) return { error: unconfigured, email }
+
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
 
@@ -111,6 +117,9 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
     return { error: 'The two passwords do not match.', name, email }
   }
 
+  const unconfigured = unconfiguredErrorMessage()
+  if (unconfigured) return { error: unconfigured, name, email }
+
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -152,6 +161,9 @@ export async function resendConfirmation(
   if (!isEmail(email)) {
     return { error: 'Enter your email address.', email }
   }
+
+  const unconfigured = unconfiguredErrorMessage()
+  if (unconfigured) return { error: unconfigured, email, needsConfirmation: true }
 
   const supabase = await createClient()
   const { error } = await supabase.auth.resend({

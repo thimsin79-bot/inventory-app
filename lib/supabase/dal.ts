@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseEnvProblems } from '@/lib/supabase/env'
 
 /**
  * Data access layer for the current session.
@@ -11,6 +12,17 @@ import { createClient } from '@/lib/supabase/server'
  * through here instead of calling supabase.auth directly.
  */
 export const getUser = cache(async (): Promise<User | null> => {
+  // With no Supabase configuration there is provably no session, so returning
+  // null is accurate rather than a bypass. Protected routes are already refused
+  // by the proxy, and requireUser still redirects, so this only decides whether
+  // /login renders or 500s. The message names variables only, never values.
+  const problems = supabaseEnvProblems()
+
+  if (problems.length > 0) {
+    console.error('[auth] Supabase is not configured:', problems.join('; '))
+    return null
+  }
+
   const supabase = await createClient()
 
   const {

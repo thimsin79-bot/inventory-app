@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/types/database.types'
+import { readSupabaseEnv, supabaseEnvProblems, unconfiguredMessage } from '@/lib/supabase/env'
 
 const PUBLIC_PATHS = new Set(['/login', '/signup', '/auth/callback', '/api/supabase-test'])
 
@@ -28,18 +29,24 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const { pathname, search } = request.nextUrl
+  const isPublicPath = PUBLIC_PATHS.has(pathname)
 
-  if (
-    !supabaseUrl ||
-    !supabaseAnonKey ||
-    !/^https?:\/\//.test(supabaseUrl)
-  ) {
-    return supabaseResponse
+  const problems = supabaseEnvProblems()
+
+  // Fail closed. Without these variables no session can be verified, so serving a
+  // protected route would hand it to an unauthenticated visitor. Public paths stay
+  // reachable so the login screen and /api/supabase-test can explain the problem.
+  if (problems.length > 0) {
+    if (isPublicPath) return supabaseResponse
+
+    return new NextResponse(unconfiguredMessage(problems), {
+      status: 503,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
   }
+
+  const { url: supabaseUrl, key: supabaseAnonKey } = readSupabaseEnv()
 
   try {
     const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -64,9 +71,6 @@ export async function updateSession(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-
-    const { pathname, search } = request.nextUrl
-    const isPublicPath = PUBLIC_PATHS.has(pathname)
 
     if (!user && !isPublicPath) {
       const target = new URL('/login', request.url)
