@@ -113,9 +113,11 @@ Add the deployment domain to Supabase under Authentication → URL Configuration
 or sign-in will succeed and then 404 on the callback:
 
 ```
-https://your-project.vercel.app/auth/callback
+https://inventory-app-thimsin.vercel.app/auth/callback
 https://*.vercel.app/auth/callback
 ```
+
+Not yet done as of 2026-10-05 — the Supabase project still has only the local origin configured.
 
 The wildcard covers preview deployments, which get a unique hostname per pull request.
 

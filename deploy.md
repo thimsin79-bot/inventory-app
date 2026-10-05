@@ -42,17 +42,19 @@ only shows up when someone tries to log in.
 
 Under **Authentication → URL Configuration**:
 
-- **Site URL**: your production origin, e.g. `https://your-project.vercel.app`.
+- **Site URL**: your production origin, `https://inventory-app-thimsin.vercel.app`.
 - **Redirect URLs**:
 
   ```
   http://localhost:3000/auth/callback
-  https://your-project.vercel.app/auth/callback
+  https://inventory-app-thimsin.vercel.app/auth/callback
   https://*.vercel.app/auth/callback
   ```
 
   Add local URLs too, otherwise confirmation links stop working on your own machine. The
   wildcard covers preview deployments, which get a unique hostname per pull request.
+  This block is still a placeholder as of 2026-10-05 — the Supabase project does not have the
+  production origin configured yet, so a confirmation link in production would be rejected.
 
 Under **Authentication → Sign In / Providers**:
 
@@ -207,9 +209,14 @@ npm run build
 Then against the deployed origin:
 
 ```powershell
-curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" https://your-project.vercel.app/
-curl.exe -s https://your-project.vercel.app/api/supabase-test
+$site = "https://inventory-app-thimsin.vercel.app"
+curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" $site/
+curl.exe -s "$site/api/supabase-test"
 ```
+
+Both currently return a Vercel SSO redirect rather than the app: **Deployment Protection is on**, so
+every route needs a Vercel session. Turn it off under Project Settings → Deployment Protection before
+using these to verify anything, or expect `302` on all of them.
 
 Checklist:
 
