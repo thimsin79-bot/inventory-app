@@ -31,7 +31,7 @@ Vercel project's environment settings or every server-rendered page will fail.
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | Browser-safe key |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Legacy alias, still read by `lib/supabase/{client,server}.ts` |
-| `SUPABASE_SERVICE_ROLE_KEY` | no | Server-only admin access. Never prefix with `NEXT_PUBLIC_` |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only admin access, required by `/admin/users`. Bypasses RLS — never prefix with `NEXT_PUBLIC_` |
 
 The publishable key is designed to be public and ships in the client bundle. It is not a secret;
 row level security is what protects your data.
@@ -42,9 +42,10 @@ Sign-up and sign-in take a **username and password only**. There is no email add
 ever emailed. Supabase still requires an email-shaped identity, so the username is mapped internally
 to `<username>@users.invalid` — a reserved TLD that can never receive mail.
 
-That means no email confirmation and no password reset; a forgotten password is an administrator
-task. **Confirm email must be off** under Authentication → Sign In / Providers, or new accounts are
-created that can never sign in.
+That means no email confirmation and no self-service password reset. If someone forgets their
+password, an admin resets it at `/admin/users`, which needs `SUPABASE_SERVICE_ROLE_KEY` set. **Confirm
+email must be off** under Authentication → Sign In / Providers, or new accounts are created that can
+never sign in.
 
 ## Database setup
 

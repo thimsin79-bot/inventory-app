@@ -66,8 +66,11 @@ No email address is collected anywhere.
 - Sign-up writes `user_metadata.username` only. `app_metadata` carries the role RLS reads and must never be settable from a public form.
 - Sign-out is `<form action={signOut}>` inside `components/UserMenu.tsx`, wrapped in `<Suspense>` in the `(app)` layout so `cookies()` does not hold back the first chunk.
 - Project auth config: `disable_signup: false`, `mailer_autoconfirm: true` → sign-in works immediately. Anonymous sign-ins are off.
+- `app/(app)/admin/users/` is the admin-only password reset. It sits in the `(app)` group so it inherits `requireUser()` from the proxy, and calls `requireAdmin()` on top. `SUPABASE_SERVICE_ROLE_KEY` is now **required** for it, because the Service Role bypasses RLS and nothing else guards that path.
+- Ordering in `app/actions/admin.ts` is deliberate: authorize with `requireAdmin()` **before** constructing the service-role client, and validate input afterwards, so an unauthorized caller cannot use the form to enumerate usernames.
+- `lib/roles.ts` reads the role from `app_metadata`, never `user_metadata` — the account holder can write `user_metadata` themselves via `supabase.auth.updateUser`, so reading it would be self-promotion. Kept import-free so `npm run check:auth` can test it.
 - Layering rule: layouts do not re-render on client navigation, so the proxy is the redirect gate and RLS is the data gate.
-- Guards: `npm run check:auth` (username mapping, case folding, redirect guard) and `npm run check:env` (deployment env validation). Both are dependency-free Node scripts.
+- Guards: `npm run check:auth` (username mapping, case folding, redirect guard, role escalation) and `npm run check:env` (deployment env validation). Both are dependency-free Node scripts.
 
 ---
 

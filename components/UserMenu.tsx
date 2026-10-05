@@ -1,6 +1,8 @@
+import Link from 'next/link'
 import { signOut } from '@/app/actions/auth'
 import { SubmitButton } from '@/components/SubmitButton'
 import { displayName, getUser } from '@/lib/supabase/dal'
+import { isAdmin } from '@/lib/roles'
 
 /**
  * Shell footer for the signed-in user.
@@ -16,11 +18,24 @@ export async function UserMenu() {
   }
 
   return (
-    <div className="mt-6 flex items-center justify-between gap-2 border-t border-zinc-200 px-3 pt-3 dark:border-zinc-800">
-      <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400" title={user.email ?? undefined}>
+    <div className="mt-6 border-t border-zinc-200 px-3 pt-3 dark:border-zinc-800">
+      <p
+        className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400"
+        title={user.email ?? undefined}
+      >
         {displayName(user)}
       </p>
-      <form action={signOut}>
+
+      {isAdmin(user) && (
+        <Link
+          href="/admin/users"
+          className="mt-1 block text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          Manage accounts
+        </Link>
+      )}
+
+      <form action={signOut} className="mt-2">
         <SubmitButton size="sm">Sign out</SubmitButton>
       </form>
     </div>

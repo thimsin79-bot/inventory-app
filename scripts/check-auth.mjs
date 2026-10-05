@@ -24,6 +24,10 @@ const auth = await import(
   pathToFileURL(`${import.meta.dirname}/../lib/auth.ts`).href
 )
 
+const roles = await import(
+  pathToFileURL(`${import.meta.dirname}/../lib/roles.ts`).href
+)
+
 let passed = 0
 let failed = 0
 
@@ -85,6 +89,34 @@ check('rejects protocol-relative urls', auth.safeNextPath('//evil.com') === '/')
 check('rejects a loop back to login', auth.safeNextPath('/login') === '/')
 check('rejects a loop back to signup', auth.safeNextPath('/signup') === '/')
 check('keeps a same-origin path', auth.safeNextPath('/items?page=2') === '/items?page=2')
+
+console.log('role comes from app_metadata, never user_metadata')
+check('admin in app_metadata passes', roles.isAdmin({ app_metadata: { role: 'admin' } }))
+check('no role is not admin', roles.isAdmin({ app_metadata: {} }) === false)
+check('empty metadata is not admin', roles.isAdmin({}) === false)
+check('null metadata is not admin', roles.isAdmin({ app_metadata: null }) === false)
+check('staff is not admin', roles.isAdmin({ app_metadata: { role: 'staff' } }) === false)
+check('viewer is not admin', roles.isAdmin({ app_metadata: { role: 'viewer' } }) === false)
+check('roleOf reads through', roles.roleOf({ app_metadata: { role: 'staff' } }) === 'staff')
+check('roleOf returns null when absent', roles.roleOf({ app_metadata: {} }) === null)
+check('roleOf ignores a non-string role', roles.roleOf({ app_metadata: { role: 1 } }) === null)
+check('roleOf ignores an object role', roles.roleOf({ app_metadata: { role: {} } }) === null)
+check(
+  'ESCALATION: admin set via user_metadata does NOT pass',
+  roles.isAdmin({ user_metadata: { role: 'admin' } }) === false,
+)
+check(
+  'ESCALATION: user_metadata admin alongside app_metadata staff does NOT pass',
+  roles.isAdmin({ app_metadata: { role: 'staff' }, user_metadata: { role: 'admin' } }) === false,
+)
+check(
+  'ESCALATION: case-variant Admin is not accepted',
+  roles.isAdmin({ app_metadata: { role: 'Admin' } }) === false,
+)
+check(
+  'ESCALATION: padded " admin " is not accepted',
+  roles.isAdmin({ app_metadata: { role: ' admin ' } }) === false,
+)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

@@ -70,8 +70,8 @@ ever emailed, and no address belongs to a real party.
 
 Two consequences follow, both intentional:
 
-- **No password reset and no email confirmation.** There is no mailbox to send either to. A forgotten
-  password has to be reset by an administrator.
+- **No email confirmation and no self-service password reset.** There is no mailbox to send either
+  to. A forgotten password is handled by an administrator — see below.
 - **An existing account created with a real email address can no longer sign in.** The form only ever
   sends `<username>@users.invalid`, so an account whose address is `alice@gmail.com` is unreachable
   through the UI. Migrate it by renaming its address to the synthetic form:
@@ -83,6 +83,25 @@ Two consequences follow, both intentional:
   Renaming frees the real address again but does **not** move the user across — they then sign up
   again with the username `alice`, which creates a second account. Delete the old row first if that
   is what you want.
+
+### Resetting a forgotten password
+
+`/admin/users` lets an admin set a new password by hand. It is reachable only when
+`app_metadata.role` is `"admin"`, which only a Service Role key or the dashboard can write.
+
+This step needs **`SUPABASE_SERVICE_ROLE_KEY`** set in the Vercel project, then rebuilt. Without it
+the page still renders and the form returns a clear "unavailable" message rather than failing
+obscurely. It is an `sb_secret_...` key from Project Settings → API → Secret keys.
+
+The admin sets the password and hands it over themselves, so **the admin knows the user's
+password**. That is the accepted cost of running without any mail infrastructure. It is not a
+"forgot password" flow and should be treated as a break-glass procedure.
+
+The service role key bypasses RLS, so the ordering in `app/actions/admin.ts` matters: the admin role
+check runs *before* the client is constructed, and input is validated after it, so an unauthorised
+caller cannot use the form to probe which usernames exist. `lib/roles.ts` reads the role from
+`app_metadata` and never from `user_metadata`, which the account holder can write themselves —
+`npm run check:auth` pins that down.
 
 ### Granting a role
 

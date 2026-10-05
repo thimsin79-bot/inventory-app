@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseEnvProblems } from '@/lib/supabase/env'
 import { emailToUsername } from '@/lib/auth'
+import { isAdmin } from '@/lib/roles'
 
 /**
  * Data access layer for the current session.
@@ -40,6 +41,21 @@ export async function requireUser(): Promise<User> {
   if (!user) {
     redirect('/login')
   }
+
+  return user
+}
+
+/**
+ * Throws unless the session belongs to an admin.
+ *
+ * Only for server-side authorization ahead of a Service Role call. The service
+ * role bypasses RLS, so this check is the entire access control for that path.
+ * The predicate itself lives in lib/roles.ts, where it is unit tested.
+ */
+export async function requireAdmin(): Promise<User> {
+  const user = await requireUser()
+
+  if (!isAdmin(user)) redirect('/')
 
   return user
 }
