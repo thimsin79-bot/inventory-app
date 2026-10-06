@@ -247,10 +247,21 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
 - **Tooling on this machine:** `gh` is installed but **not** authenticated (`gh auth login` needed, so
   check runs cannot be read). The `vercel` CLI is installed but the project is **not** linked (no
   `.vercel/project.json`, which `.gitignore` covers) and there is no `VERCEL_TOKEN`.
-- **Verifying a deploy with no credentials:** pick a string that exists in exactly one commit and grep
-  the production HTML for it. `git show <old-sha>:<file> | Select-String <string>` against the new one
-  proves both that the string is new and that it is live. Signature blocks in the HTML are useless for
-  this — they are deployment-specific, not commit-specific.
+- **Verifying a deploy with no credentials — and its limit.** Pick a string that exists in exactly
+  one commit, confirm it is absent from the parent (`git show <old-sha>:<file> | Select-String
+  <string>`), then grep the production HTML for it. Signature blocks in the HTML are useless for this
+  — they are deployment-specific, not commit-specific.
+
+  **This only works while Deployment Protection is OFF.** Checked 2026-10-06, pushing `fe6b98f`: with
+  protection on, `GET /` returns `302 -> https://vercel.com/sso-api?...` and the body is 14 bytes, so
+  there is no HTML to grep. It 302s `/login` too, so the "route now 404s" test from §7 is equally
+  blind — nothing in the response distinguishes a deployed build from an undeployed one.
+
+  What you can verify with no credentials is that the commit reached the remote:
+  `git ls-remote origin -h refs/heads/main` should print that sha. Everything past that — build
+  success, live rollout — needs a Vercel session in a browser, `gh auth login`, or a
+  `VERCEL_TOKEN`. Decide for a given deploy which one you are relying on rather than assuming the
+  push implies the deploy.
 
 ---
 
