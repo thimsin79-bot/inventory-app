@@ -139,143 +139,83 @@ ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
--- Roles
--- ==============================================================================
--- Four roles, descending:
---
---   viewer   read every table, change nothing
---   staff    + record movements, requests, audits and purchases
---   manager  + edit reference data (categories, warehouses, suppliers,
---             departments)
---   admin    + manage accounts and roles
---
--- Every policy names its roles explicitly instead of comparing a rank, so a role
--- added in one place but not the other matches nothing and fails closed, rather
--- than silently inheriting the top tier.
---
--- The role lives in `raw_app_meta_data` and reaches the policies through
--- `private.current_role()`. It must NOT be read from `user_metadata`, which the
--- account holder can rewrite via `supabase.auth.updateUser` -- that would let
--- anyone self-promote to admin. Only the Service Role key or the dashboard can
--- write `app_metadata`. `/admin/users` writes it through the Service Role after
--- an admin check.
---
--- Grant a role by hand (dashboard -> Authentication -> user -> app_metadata, or
--- the Management API):
---   UPDATE auth.users
---   SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
---   WHERE email = 'alice@users.invalid';
---
--- An account with no role claim matches no policy below and sees zero rows,
--- which is the correct outcome for an unprivileged self-registered account.
-
--- Kept out of `public` so it is not part of the Data API surface. SECURITY
--- INVOKER (the default) on purpose: it reads the caller's own JWT and grants
--- nothing, so it cannot be used to escalate.
-CREATE SCHEMA IF NOT EXISTS private;
-
-CREATE OR REPLACE FUNCTION private.current_role()
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT coalesce(
-    (SELECT auth.jwt() -> 'app_metadata' ->> 'role'),
-    ''
-  );
-$$;
-
--- ==============================================================================
 -- Policies
 -- ==============================================================================
--- Generated rather than written out longhand: nine tables times four commands is
--- thirty-six policies, and hand-maintained copies of the same two role lists are
--- exactly where a permission matrix rots. The lists below are the single source
--- of truth; `scripts/check-rls.mjs` diffs them against `lib/roles.ts`, which is
--- the client-side mirror the UI reads to decide which buttons to show.
+-- There is no authentication and no role ladder. The app talks to the database
+-- with the publishable key, which PostgREST presents as the `anon` role, so every
+-- request from this application is an `anon` request and there is nothing in the
+-- JWT to branch on.
 --
--- Two policies per table:
+-- That means these policies grant `anon` full read and write on all nine tables.
+-- **They are not a security boundary.** Anyone who can reach the Supabase project
+-- can read and write all of it. The only gate in front of this app is Vercel
+-- Deployment Protection (Project Settings -> Deployment Protection), which
+-- 302s anonymous traffic to Vercel SSO. If that is switched off, or the Supabase
+-- project is reached directly, the data is open. The policies below exist so the
+-- app functions, not so it is safe.
 --
---   read on <table>   SELECT, for anyone holding any role
---   write on <table>  INSERT / UPDATE / DELETE, for the roles that may modify it
+-- Two policies per table, generated rather than written out longhand because nine
+-- tables times four commands is thirty-six statements to keep in step:
 --
--- `TO authenticated` drops the anonymous role entirely -- no policy below is in
--- force for `anon`, so a session-less request holding only the publishable key
--- matches nothing.
+--   read on <table>   SELECT
+--   write on <table>  INSERT / UPDATE / DELETE
 --
--- WITH CHECK is as load-bearing as USING here. Without it a caller could insert
--- a row, or update one, that the USING clause would never have let them see.
+-- `TO anon` rather than the default `TO public`, so the grant is an accurate
+-- statement about who this is for. It also fails closed: if accounts are ever
+-- reintroduced, a signed-in `authenticated` request matches nothing until the
+-- policies are revisited deliberately.
+--
+-- WITH CHECK is as load-bearing as USING. Without it a caller could insert a row,
+-- or update one, that the USING clause would never have let them see.
 
 DO $policies$
 DECLARE
-  -- Reference data is org-wide configuration, changed rarely. Operational data
-  -- is the day-to-day movement of stock and the paperwork around it.
-  reference_tables   text[] := ARRAY['categories', 'suppliers', 'warehouses', 'departments'];
-  operational_tables text[] := ARRAY['items', 'purchases', 'transactions', 'requests', 'audits'];
-  all_tables         text[] := reference_tables || operational_tables;
+  all_tables text[] := ARRAY[
+    'categories', 'suppliers', 'warehouses', 'departments',
+    'items', 'purchases', 'transactions', 'requests', 'audits'
+  ];
 
-  read_roles     text[] := ARRAY['admin', 'manager', 'staff', 'viewer'];
-  reference_rw   text[] := ARRAY['admin', 'manager'];
-  operational_rw text[] := ARRAY['admin', 'manager', 'staff'];
-
-  t          text;
-  writable   text[];
-  read_literal text;
-  rw_literal   text;
+  t text;
 BEGIN
-  read_literal := (
-    SELECT string_agg(quote_literal(role), ', ' ORDER BY ord)
-    FROM unnest(read_roles) WITH ORDINALITY AS u(role, ord)
-  );
-
   FOREACH t IN ARRAY all_tables LOOP
-    IF t = ANY (reference_tables) THEN
-      writable := reference_rw;
-    ELSE
-      writable := operational_rw;
-    END IF;
-
-    -- Folded to a SQL literal once per table. Combined with the (SELECT ...)
-    -- wrapper on current_role(), this keeps the role read as an InitPlan instead
-    -- of re-evaluating auth.jwt() per row.
-    rw_literal := (
-      SELECT string_agg(quote_literal(role), ', ' ORDER BY ord)
-      FROM unnest(writable) WITH ORDINALITY AS u(role, ord)
-    );
-
     -- Drop first to keep this script re-runnable: a multi-statement script runs
     -- in one implicit transaction, so a single duplicate-policy error would roll
-    -- all of it back. The pre-permission-matrix `staff_access on <table>` and
-    -- `Allow public ...` policies are named here too, so re-running retires them.
+    -- all of it back. The role-ladder and pre-role-ladder policies are named here
+    -- too, so re-running retires them.
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'staff_access on ' || t, t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public read access on ' || t, t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public modifications on ' || t, t);
-
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'read on ' || t, t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'write on ' || t, t);
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
-      'read on ' || t, t, read_literal
+      'CREATE POLICY %I ON public.%I FOR SELECT TO anon USING (true)',
+      'read on ' || t, t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
-      'write on ' || t, t, rw_literal
+      'CREATE POLICY %I ON public.%I FOR INSERT TO anon WITH CHECK (true)',
+      'write on ' || t, t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s])) WITH CHECK ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
-      'write on ' || t, t, rw_literal, rw_literal
+      'CREATE POLICY %I ON public.%I FOR UPDATE TO anon USING (true) WITH CHECK (true)',
+      'write on ' || t, t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING ((SELECT private.current_role()) = ANY (ARRAY[%s]))',
-      'write on ' || t, t, rw_literal
+      'CREATE POLICY %I ON public.%I FOR DELETE TO anon USING (true)',
+      'write on ' || t, t
     );
   END LOOP;
 END
 $policies$;
+
+-- The `private` schema and `private.current_role()` are dropped: with no roles
+-- there is nothing for the function to read. Dropping rather than leaving them
+-- means a re-run cannot be silently shadowed by a leftover claim check.
+DROP FUNCTION IF EXISTS private.current_role();
+DROP SCHEMA IF EXISTS private CASCADE;
 
 -- ==============================================================================
 -- Table grants
@@ -284,33 +224,33 @@ $policies$;
 -- with no table grant gets `permission denied for table` regardless of policy.
 -- Supabase stopped auto-exposing new public-schema tables to the Data API
 -- (enforced for all projects on 2026-10-30), so these are granted explicitly
--- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing the
--- authenticated role access to anything added later by accident.
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated;
+-- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing `anon`
+-- access to anything added later by accident.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
 
--- No screen deletes a purchase, transaction, request or audit, and
--- `services/inventoryService.ts` exports no delete for them either -- so DELETE is
--- withheld rather than left to the policies alone. If a delete feature is ever
--- added for one of these, add the grant in the same change. `items` keeps DELETE
--- because the inventory screen does delete items.
-GRANT SELECT, INSERT, UPDATE ON public.purchases TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.transactions TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.requests TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.audits TO authenticated;
+-- The one limit that survives the removal of roles: no screen deletes a purchase,
+-- transaction, request or audit, and `services/inventoryService.ts` exports no
+-- delete for them either -- so DELETE is withheld rather than left to the
+-- policies alone. If a delete feature is ever added for one of these, add the
+-- grant in the same change. `items` keeps DELETE because the inventory screen
+-- does delete items.
+GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.transactions TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;
 
-REVOKE ALL ON public.categories FROM anon;
-REVOKE ALL ON public.suppliers FROM anon;
-REVOKE ALL ON public.warehouses FROM anon;
-REVOKE ALL ON public.departments FROM anon;
-REVOKE ALL ON public.items FROM anon;
-REVOKE ALL ON public.purchases FROM anon;
-REVOKE ALL ON public.transactions FROM anon;
-REVOKE ALL ON public.requests FROM anon;
-REVOKE ALL ON public.audits FROM anon;
-
--- Same protection for tables created after this script runs.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+-- `authenticated` is granted nothing, so an account that still exists in the
+-- Supabase project from before cannot be used as a way in.
+REVOKE ALL ON public.categories FROM authenticated;
+REVOKE ALL ON public.suppliers FROM authenticated;
+REVOKE ALL ON public.warehouses FROM authenticated;
+REVOKE ALL ON public.departments FROM authenticated;
+REVOKE ALL ON public.items FROM authenticated;
+REVOKE ALL ON public.purchases FROM authenticated;
+REVOKE ALL ON public.transactions FROM authenticated;
+REVOKE ALL ON public.requests FROM authenticated;
+REVOKE ALL ON public.audits FROM authenticated;

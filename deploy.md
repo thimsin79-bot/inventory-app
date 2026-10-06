@@ -4,24 +4,57 @@ Runbook for shipping this app to Vercel and verifying it. `README.md` covers loc
 summary of the Vercel flow; this file is the ordered checklist, including the Supabase-side
 configuration that a Vercel deploy cannot complete on its own.
 
+Authentication was removed on 2026-10-06 — no login, no sessions, no roles, no server-side user.
+Two decisions therefore have to be made by hand before anything real goes out: who can reach the
+URL (step 2) and whether the live database has been moved onto the new policies (step 4).
+
 ## 1. Prerequisites
 
 - Node.js 20.9 or newer. `engines.node` in `package.json` pins the version Vercel builds with.
-- A Supabase project with `supabase/schema.sql` applied.
-- A Vercel account able to import the GitHub repository.
+- A Supabase project with `supabase/schema.sql` applied. If it has not been re-run since
+  2026-10-06, see step 4 — that is a blocker, not a formality.
+- A Vercel account able to import the GitHub repository, plus a decision about who in the team
+  gets a Vercel account (step 2).
 
-## 2. Environment variables
+## 2. Decide who can reach the app
+
+**Deployment Protection is the only access control this application has, and it has to be
+consciously decided. Nothing below — environment variables, schema, headers — substitutes for it.**
+
+The app holds exactly one credential: the Supabase publishable key, which ships to the browser by
+design. Every database request therefore reaches PostgREST as the `anon` role, and
+`supabase/schema.sql` grants `anon` read and write on all nine tables. Those grants exist so the
+app functions; they are **not** a security boundary, and row level security cannot tighten them,
+because there is no identity for it to check.
+
+The one gate is **Vercel Deployment Protection** (Project Settings → Deployment Protection), which
+302s anonymous traffic to Vercel SSO. It is currently **on**, and both settings have a cost:
+
+- **On:** only people with an account in your Vercel team can open the app at all. Ordinary staff
+  need a Vercel account in the team to see anything — probably not what a school wants, but it is
+  the only arrangement the current code supports.
+- **Off:** the inventory becomes world-writable at that URL, and the Supabase project is reachable
+  directly from any browser with the public key. Anyone who can load the page can write to every
+  table.
+
+Turning it off to share a link is therefore a deliberate, recorded decision, not a routine toggle.
+Sharing with people who have no Vercel account means building an authentication layer again; no
+dashboard setting can stand in for one. Step 6 assumes the gate is on.
+
+## 3. Environment variables
 
 Set these in the Vercel project under **Settings → Environment Variables**, not in a committed
-file. Tick both **Production** and **Preview**, or preview builds fail to render any server
-component.
+file. Tick both **Production** and **Preview**, or a preview deployment is built without them and
+every screen reports a missing variable.
 
 | Variable | Scope | Required | Notes |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser + server | yes | Project URL, e.g. `https://<ref>.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser + server | yes | Browser-safe key |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser + server | yes | Legacy alias, still read by `lib/supabase/{client,server}.ts` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only | no | Admin access. Never give it a `NEXT_PUBLIC_` prefix |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser + server | yes | Legacy alias; `lib/supabase/env.ts` accepts it when the publishable key is unset |
+
+That is the whole list. There is no server-side secret: nothing in the repo reads a service-role
+or `sb_secret_` key, and there is no privileged client to leak.
 
 Rules that are easy to get wrong:
 
@@ -35,120 +68,58 @@ Rules that are easy to get wrong:
 `.env.example` is committed and is the source of truth for this list. Keep it in sync when the
 code starts reading a new variable.
 
-## 3. Supabase configuration
+## 4. Supabase configuration
 
-Do this before the first deploy. A deploy will succeed even if it is missing, and the failure
-only shows up when someone tries to log in.
+Do this before the first deploy. A deploy succeeds even when it is missing, because nothing in the
+build touches the database — the gap only shows up as a boundary that does not match the repo.
 
-Under **Authentication → URL Configuration**:
+### Re-run `supabase/schema.sql` (blocking)
 
-- **Site URL**: your production origin, `https://inventory-app-thimsin.vercel.app`.
-- **Redirect URLs**:
+`supabase/schema.sql` was rewritten on 2026-10-06 when authentication was removed, and it has
+**not been run against the live project yet**, so the live policies are whatever the previous run
+created rather than what this repo describes.
 
-  ```
-  http://localhost:3000/auth/callback
-  https://inventory-app-thimsin.vercel.app/auth/callback
-  https://*.vercel.app/auth/callback
-  ```
+Measured on 2026-10-06 with the publishable key straight against PostgREST (`select=*&count=exact`
+per table, read-only):
 
-  Add local URLs too, otherwise confirmation links stop working on your own machine. The
-  wildcard covers preview deployments, which get a unique hostname per pull request.
-  This block is still a placeholder as of 2026-10-05 — the Supabase project does not have the
-  production origin configured yet, so a confirmation link in production would be rejected.
+| | categories | items | warehouses | suppliers | departments | purchases | transactions | requests | audits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| observed | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
-Under **Authentication → Sign In / Providers**:
+So anon **can** read — the app is not blank today — but only `items` has any data left. Two
+practical consequences: running this file is about making the boundary match the repo, and the
+row counts this project once had are gone, so run `supabase/seed.sql` too if you want a populated
+app.
 
-- **Confirm email: off.** Accounts here have no mailbox — the login form takes a username, which is
-  mapped internally to `<username>@users.invalid`, and `.invalid` never resolves. If confirmation is
-  on, a new account is created that can never sign in, because the link cannot be delivered. The
-  signup form detects this and says so rather than dead-ending.
-- **Enable email signup: on.** Unlike a normal app, this one *cannot* turn self-registration off.
-  There is no invite flow and no mailbox to deliver one, so public sign-up is the only way to create
-  an account — see *No email is involved* below. With it off, nothing can onboard anybody.
+Paste the whole file into the Supabase dashboard → **SQL Editor** → new query and run it. It is
+re-runnable: it drops its own policies by name, retires the older role-ladder and public-access
+policies, drops `private.current_role()` and the `private` schema itself, then generates
+`TO anon USING (true)` / `WITH CHECK (true)` policies on all nine tables and grants `anon`
+SELECT, INSERT, UPDATE and DELETE.
 
-### No email is involved
+**No script in the repo executes SQL.** There is no migration runner and no CLI step; nothing in
+`npm run build` or the Vercel deploy touches the database. Running the file in the SQL editor is
+a manual step, and nothing reminds you it is outstanding.
 
-Sign-up and sign-in are username and password only. Supabase's password grant still requires an
-email-shaped identity, so `lib/auth.ts` maps the username onto the reserved `.invalid` TLD. Nothing is
-ever emailed, and no address belongs to a real party.
+Two details in the new script worth knowing:
 
-Two consequences follow, both intentional:
+- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests` and `audits`,
+  because nothing in the app deletes them. `items` and the four reference tables keep it.
+- `authenticated` is revoked on every table, so an account left over from before the removal is
+  not a way in.
 
-- **No email confirmation and no self-service password reset.** There is no mailbox to send either
-  to. A forgotten password is handled by an administrator — see below.
-- **An existing account created with a real email address can no longer sign in.** The form only ever
-  sends `<username>@users.invalid`, so an account whose address is `alice@gmail.com` is unreachable
-  through the UI. Migrate it by renaming its address to the synthetic form:
+Re-run the probe above after the script finishes. The one outcome that matters — and that
+`npm run check` cannot see, because it only reads the file — is anon losing its rows: a run that
+leaves every screen empty while `/api/supabase-test` still reports `"status":"ready"`.
 
-  ```sql
-  UPDATE auth.users SET email = 'alice@users.invalid' WHERE email = 'alice@gmail.com';
-  ```
+Once the schema is applied, run `supabase/seed.sql` for sample data if the project is new.
 
-  Renaming frees the real address again but does **not** move the user across — they then sign up
-  again with the username `alice`, which creates a second account. Delete the old row first if that
-  is what you want.
-
-### Resetting a forgotten password
-
-`/admin/users` lets an admin set a new password by hand. It is reachable only when
-`app_metadata.role` is `"admin"`, which only a Service Role key or the dashboard can write.
-
-This step needs **`SUPABASE_SERVICE_ROLE_KEY`** set in the Vercel project, then rebuilt. Without it
-the page still renders and the form returns a clear "unavailable" message rather than failing
-obscurely. It is an `sb_secret_...` key from Project Settings → API → Secret keys.
-
-The admin sets the password and hands it over themselves, so **the admin knows the user's
-password**. That is the accepted cost of running without any mail infrastructure. It is not a
-"forgot password" flow and should be treated as a break-glass procedure.
-
-The service role key bypasses RLS, so the ordering in `app/actions/admin.ts` matters: the admin role
-check runs *before* the client is constructed, and input is validated after it, so an unauthorised
-caller cannot use the form to probe which usernames exist. `lib/roles.ts` reads the role from
-`app_metadata` and never from `user_metadata`, which the account holder can write themselves —
-`npm run check:auth` pins that down.
-
-### Granting a role
-
-Policies are gated on a role claim in `raw_app_meta_data`, so an account with no role matches no
-policy and sees empty tables. Four roles, descending:
-
-| Role | Can do |
-| --- | --- |
-| `viewer` | read everything, change nothing |
-| `staff` | plus record movements, requests, audits and purchases |
-| `manager` | plus edit the reference tables (categories, warehouses, suppliers, departments) |
-| `admin` | plus manage accounts and roles |
-
-Assign one per user:
-
-```sql
-UPDATE auth.users
-SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
-WHERE email = 'alice@users.invalid';
-```
-
-Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
-claim is issued into their JWT at token creation.
-
-`/admin/users` does this through a form instead, using the Service Role key. Two things it will not
-do, both deliberate:
-
-- It **merges** into `raw_app_meta_data` rather than replacing it, so other claims survive.
-- It **refuses to change your own role**. Demoting the last admin is unrecoverable through the app,
-  because `/admin/users` is the only surface that writes the claim and it is the page that
-  lockout would remove. Another admin can still do it, and so can the dashboard or the Management
-  API.
-
-`supabase/schema.sql` generates the policies from four arrays rather than writing all thirty-six by
-hand. Change the array, re-run the script, and `npm run check:rls` will fail if the result and
-`lib/roles.ts` disagree.
-
-## 4. Import and deploy
+## 5. Import and deploy
 
 1. Push the repository to GitHub.
 2. Import it at [vercel.com/new](https://vercel.com/new). The framework preset, build command
    (`npm run build`), and output settings are all detected; leave them alone.
-3. Add the environment variables from step 2 before the first deploy.
+3. Add the environment variables from step 3 before the first deploy.
 4. Deploy.
 
 With Git integration enabled, no further configuration is needed:
@@ -187,8 +158,8 @@ Deliberately **not** set:
 
 - `buildCommand` / `installCommand` / `outputDirectory`. These are detected correctly, and pinning
   them means a later change to `package.json` gets silently overridden.
-- `proxy`. Next.js 16 auto-detects the root `proxy.ts`; the build output confirms
-  `ƒ Proxy (Middleware)`.
+- `proxy`. There is no middleware to detect: `proxy.ts` was deleted on 2026-10-06, and the build
+  output has no `ƒ Proxy (Middleware)` line.
 - `cleanUrls` / `trailingSlash`. Handled by Next.js routing.
 - A Content-Security-Policy. Next.js hydration emits inline scripts and the browser Supabase
   client needs `connect-src` pointed at whichever project URL is configured, so a static CSP in
@@ -196,118 +167,100 @@ Deliberately **not** set:
 
 Changing `regions` takes effect on the next deployment, and only for new deployments.
 
-## 5. Verify a release
+## 6. Verify a release
 
 Run these locally before pushing:
 
 ```bash
+npm run check    # check:env + check:rls, 22 / 49 assertions
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-Then against the deployed origin:
+The build output should list all ten app screens as `○ Static` and only `/api/supabase-test` as
+`ƒ (Dynamic)`.
+
+Then locally, with a dev server on `:3000`:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" http://localhost:3000/       # 200, no redirect
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/login                     # 404
+curl.exe -s http://localhost:3000/api/supabase-test                                  # {"status":"ready",...}
+```
+
+And against the deployed origin:
 
 ```powershell
 $site = "https://inventory-app-thimsin.vercel.app"
 curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" $site/
+curl.exe -s -o NUL -w "%{http_code}" "$site/login"
 curl.exe -s "$site/api/supabase-test"
 ```
 
-Both currently return a Vercel SSO redirect rather than the app: **Deployment Protection is on**, so
-every route needs a Vercel session. Turn it off under Project Settings → Deployment Protection before
-using these to verify anything, or expect `302` on all of them.
+While Deployment Protection is on, **every production curl returns `302` to Vercel SSO**. That is
+the expected answer and confirms the gate from step 2 is working — it is not a fault. To check
+the app itself, either sign in through a browser with a Vercel team account or deliberately turn
+the gate off (step 2), and remember it is on again afterwards.
 
 Checklist:
 
-- `/` returns `307` to `/login?next=%2F` when signed out. A `200` means the proxy let an
-  unauthenticated request through.
-- `/login` returns `200` and renders the form.
-- `/api/supabase-test` returns `"status":"ready"`. `connected_with_schema_missing` means the env
-  vars are wrong or `supabase/schema.sql` was never applied.
-- Sign in with a known account and load `/inventory`. Rows present means the session and RLS are
-  both working.
+- Locally `/` returns `200` with no redirect. A redirect to `/login` would mean the deleted route
+  guard is back.
+- `/login`, `/signup`, `/auth/callback` and `/admin/users` all return `404` — those routes were
+  deleted on 2026-10-06. A `200` on any of them means a stale build.
+- `/api/supabase-test` returns `"status":"ready"`. `unconfigured` means the env vars from step 3
+  are missing or still placeholders; `connected_with_schema_missing` means the tables do not
+  exist at all.
+- `/inventory` shows rows with no sign-in, because there is nothing to sign in to. As measured in
+  step 4, only `items` has data — the other eight screens are empty because the project has no
+  rows, not because a policy is refusing them. Running `supabase/seed.sql` is what fills them.
+  A "Database schema not applied" panel means `schema.sql` has never run on that project at all.
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
-**"Signups not allowed for this instance."** GoTrue's `422 signup_disabled`, meaning the project has
-**Enable email signup** switched off. This is a dead end for this app by design — it has no invite
-flow and no mailbox, so public sign-up is the only onboarding path. Turn it back on under
-**Authentication → Sign In / Providers → Email**, or create accounts by hand with a Service Role key:
+**"Every table except items is empty."** That is the state measured on 2026-10-06: `items` had 2
+rows and the other eight tables had none. It is missing data, not a policy refusing you — anon
+reads rows fine. Run `supabase/seed.sql`. To tell data from a policy problem, compare against
+`/api/supabase-test`: if it reports `"ready"` and the screens are still empty, the rows are not
+there. A policy that matches nothing returns empty rather than an error, so neither surface
+distinguishes them on its own — use the probe in step 4.
 
-```ts
-await admin.auth.admin.createUser({
-  email: 'alice@users.invalid',
-  password: '…',
-  email_confirm: true,
-})
-```
+**Every screen shows `Supabase is not configured: …`.** The variable named in the message is
+unset or still holds the `.env.example` placeholder in the environment that built the page —
+`.env.local` locally, project environment variables on Vercel. See *What happens when the
+variables are missing* below.
 
-Confirm either setting without the dashboard by reading it back:
+**The page loads but every screen sits in an error state while `/api/supabase-test` says
+`unconfigured`.** Not a contradiction: the ten screens are static shells and the data fetch
+happens in the browser. Every consumer shares `supabaseEnvProblems()` in `lib/supabase/env.ts`,
+so the diagnostic cannot disagree with the app about which variable is wrong.
 
-```powershell
-Invoke-RestMethod "$env:NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" `
-  -Headers @{ apikey = $env:NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY } | Select-Object disable_signup, mailer_autoconfirm
-```
-
-**"Account created, but it cannot sign in yet."** Supabase still has **Confirm email** enabled, so
-`signUp` returned no session and the account can never be confirmed — there is no mailbox. Turn
-**Confirm email** off under Authentication → Sign In / Providers.
-
-**Sign-in says the account is "waiting to be approved".** The same cause, reached later: the account
-was created while confirmation was on. Clearing the flag does not retroactively confirm it, so either
-flip the setting and re-register, or confirm it directly:
-
-```sql
-UPDATE auth.users SET email_confirmed_at = now()
-WHERE email = 'alice@users.invalid' AND email_confirmed_at IS NULL;
-```
-
-**An account that used to work now returns "not valid".** It was created with a real email address,
-which the username-only form can never produce. See *No email is involved* in step 3 for the
-migration.
-
-**Sign-in says "That username and password combination is not valid" but the password is
-right.** GoTrue returns HTTP `400` for both bad credentials and an unconfirmed account, so the
-action branches on the `email_not_confirmed` code and reports the unconfirmed case separately.
-`Alice` and `alice` are the same account: usernames are case-folded before they are used.
-
-**"Everything renders but every table is empty."** Two separate causes, both common:
-
-- The signed-in account has **no role claim**, so it matches no policy. See *Granting a role* in
-  step 3. The shell shows `No role` under the username, which is the tell.
-- The account has a role but `supabase/schema.sql` has not been re-run since a role was added. The
-  policies name roles explicitly and fail closed, so an unrecognised role matches nothing.
+**Curl against production always returns `302`.** That is Deployment Protection (step 2), and it
+is working as intended. Verify locally instead, or use a browser signed in to the Vercel team.
 
 **`totalItemsInDb` is far lower than expected.** The database is genuinely under-seeded;
 `/api/supabase-test` counts real rows. Re-apply `supabase/seed.sql`.
 
-**Build fails on a missing variable.** It was set only in `.env.local`, which Vercel cannot see.
+**A variable exists but the deployment cannot see it.** It was set only in `.env.local`, which
+Vercel never reads. Set it in the project environment settings, then rebuild — `NEXT_PUBLIC_*`
+values are inlined at build time, so a restart is not enough.
 
-**Any protected route returns 503, and `/login` still renders.** This is the signature of Supabase
-environment variables missing from the Vercel project. `/api/supabase-test` reports
-`"status":"unconfigured"` with a `details` array naming each missing or placeholder variable.
-
-**A route returns 200 while `/api/supabase-test` says `unconfigured`.** Those were separate checks
-and had drifted apart. Every consumer now shares `supabaseEnvProblems()` in
-`lib/supabase/env.ts`, so the diagnostic cannot disagree with the app.
+**`check:rls` fails after editing `supabase/schema.sql`.** It reads the file back and fails if a
+table is left uncovered, if grants and policies disagree, if `DELETE` leaks onto one of the four
+tables nothing deletes from, or if a role ladder or `FOR ALL` catch-all comes back. Fix the
+script, not the assertion.
 
 ## What happens when the variables are missing
 
-The proxy **fails closed**. Without a URL and a key no session can be verified, so serving a
-protected route would hand it to an unauthenticated visitor. Public paths stay reachable so the
-diagnosis is still available:
+There is no proxy to fail closed any more (`proxy.ts` was deleted on 2026-10-06), so a missing
+variable surfaces inside the running app instead of as a `503`:
 
 | Request | Response |
 | --- | --- |
-| `/`, `/items`, any protected route | `503` with a plain-text list of the missing variables |
-| `/login`, `/signup` | `200`; submitting the form shows the same message inline |
-| `/api/supabase-test` | `200` with `"status":"unconfigured"` and the variable names |
-
-Earlier revisions of this app answered `200` on protected routes in this state, because the proxy
-returned before the auth redirect. Nothing was leaked — RLS still applied and the browser client had
-no project to query — but a shell rendering for anonymous visitors is the wrong default, so it now
-refuses instead.
+| any app screen | `ErrorState` naming the missing or placeholder variable; the header badge reads `Supabase Not configured` |
+| `/api/supabase-test` | `200` with `"status":"unconfigured"` and the variable names in `details` |
+| `/login`, `/signup`, `/admin/users` | `404`; the routes no longer exist |
 
 `lib/supabase/env.ts` treats a blank variable and an unedited `.env.example` as unconfigured. Both
 were previously read as valid: `KEY=` in an env file yields `''` rather than `undefined`, and
@@ -322,7 +275,7 @@ npm run check:env
 Add the variables and redeploy. A restart is not enough, because `NEXT_PUBLIC_*` values are inlined
 at build time.
 
-## 7. Rollback
+## 8. Rollback
 
 Promote a known-good build from the Vercel dashboard's Deployments tab, which is faster than
 reverting on `main`. To revert in Git instead:
@@ -334,11 +287,13 @@ git push origin main
 
 The revert triggers a new production deploy, so it is a normal deployment, not a special path.
 
-## 8. Before you deploy anything real
+## 9. Before you deploy anything real
 
-- RLS is the only data boundary, because all reads and writes go through the browser Supabase
-  client in `services/inventoryService.ts`. Confirm no table has a permissive `FOR ALL USING
-  (true)` policy.
+- All reads and writes go through the browser Supabase client in `services/inventoryService.ts`,
+  as `anon`, and the schema grants `anon` everything on purpose. RLS is not a security boundary
+  here — Deployment Protection (step 2) is the entire boundary, and `npm run check:rls` is what
+  keeps the schema honest about which table grants what. Do not widen a policy to make a query
+  pass without reading `CLAUDE.md` §3 first.
 - Rotate any credential that has been pasted into a chat, an issue, or a commit. Create scoped
   personal access tokens instead of classic ones, which grant full account access.
 - Never commit `.env.local`. Only `.env.example` belongs in the repository.

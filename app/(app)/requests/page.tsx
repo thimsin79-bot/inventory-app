@@ -10,14 +10,12 @@ import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
-import { usePermissions } from '@/components/Permissions'
 
 type Row = Tables<'requests'>
 
 const NEXT_STATUSES = ['Approved', 'Rejected', 'Issued', 'Returned'] as const
 
 export default function RequestsPage() {
-  const { writeOperational } = usePermissions()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -78,22 +76,20 @@ export default function RequestsPage() {
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ]
 
-  if (writeOperational) {
-    columns.push({
-      key: 'actions',
-      header: '',
-      className: 'text-right',
-      render: (r) => (
-        <div className="flex flex-wrap justify-end gap-1">
-          {NEXT_STATUSES.filter((s) => s !== r.status).map((s) => (
-            <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
-              {s}
-            </Button>
-          ))}
-        </div>
-      ),
-    })
-  }
+  columns.push({
+    key: 'actions',
+    header: '',
+    className: 'text-right',
+    render: (r) => (
+      <div className="flex flex-wrap justify-end gap-1">
+        {NEXT_STATUSES.filter((s) => s !== r.status).map((s) => (
+          <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
+            {s}
+          </Button>
+        ))}
+      </div>
+    ),
+  })
 
   return (
     <>
@@ -101,11 +97,9 @@ export default function RequestsPage() {
         title="Requests"
         description="Requisitions raised by departments."
         actions={
-          writeOperational ? (
-            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-              New request
-            </Button>
-          ) : undefined
+          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+            New request
+          </Button>
         }
       />
 

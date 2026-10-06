@@ -25,7 +25,6 @@ import {
   type ItemFormState,
 } from '@/components/ItemFormFields'
 import { MovementForm } from '@/components/MovementForm'
-import { usePermissions } from '@/components/Permissions'
 
 type ItemRow = Tables<'items'> & {
   category: Tables<'categories'> | null
@@ -33,7 +32,6 @@ type ItemRow = Tables<'items'> & {
 }
 
 export default function InventoryPage() {
-  const { writeOperational } = usePermissions()
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
   const [notice, setNotice] = useState<string | null>(null)
@@ -147,26 +145,24 @@ export default function InventoryPage() {
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ]
 
-  if (writeOperational) {
-    columns.push({
-      key: 'actions',
-      header: '',
-      className: 'text-right',
-      render: (r) => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" onClick={() => setMoving(r)}>
-            Move
-          </Button>
-          <Button size="sm" onClick={() => openEdit(r)}>
-            Edit
-          </Button>
-          <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
-            Delete
-          </Button>
-        </div>
-      ),
-    })
-  }
+  columns.push({
+    key: 'actions',
+    header: '',
+    className: 'text-right',
+    render: (r) => (
+      <div className="flex justify-end gap-1">
+        <Button size="sm" onClick={() => setMoving(r)}>
+          Move
+        </Button>
+        <Button size="sm" onClick={() => openEdit(r)}>
+          Edit
+        </Button>
+        <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
+          Delete
+        </Button>
+      </div>
+    ),
+  })
 
   return (
     <>
@@ -195,11 +191,9 @@ export default function InventoryPage() {
                 </option>
               ))}
             </select>
-            {writeOperational && (
-              <Button variant="primary" onClick={openCreate}>
-                New item
-              </Button>
-            )}
+            <Button variant="primary" onClick={openCreate}>
+              New item
+            </Button>
           </>
         }
       />

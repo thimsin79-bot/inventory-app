@@ -1,7 +1,7 @@
 /**
  * Validation for the Supabase environment variables.
  *
- * Every entry point (proxy, server client, browser client) used to assert these
+ * Every entry point (server client, browser client) used to assert these
  * with `process.env.X!`, which is a compile-time-only check. A missing variable
  * therefore reached the Supabase SDK as `undefined` and surfaced as an opaque
  * throw, so a misconfigured deployment looked like an application bug.
@@ -82,19 +82,6 @@ export function unconfiguredErrorMessage(): string {
   if (problems.length === 0) return ''
 
   return `Supabase is not configured: ${problems.join('; ')}. ${REBUILD_NOTE}`
-}
-
-/** Plain-text body for the proxy response, so it is readable in a browser. */
-export function unconfiguredMessage(problems: string[]): string {
-  return [
-    'Supabase is not configured on this deployment.',
-    '',
-    ...problems.map((problem) => `  - ${problem}`),
-    '',
-    REBUILD_NOTE,
-    '',
-    'Public paths are still served, and /api/supabase-test reports the same details.',
-  ].join('\n')
 }
 
 /**

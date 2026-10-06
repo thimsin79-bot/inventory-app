@@ -35,8 +35,8 @@ export function ConnectionStatus() {
   // Pure probe: resolves a result rather than writing state, so the caller
   // applies it from a promise callback instead of during render.
   const runProbe = useCallback(async (): Promise<Probe> => {
-    // Same check the proxy and server clients use, so this badge cannot claim
-    // "connected" while the app itself refuses to serve.
+      // Same check the server and browser clients make before calling Supabase,
+      // so this badge cannot claim "connected" for an environment that throws.
     const problems = supabaseEnvProblems()
 
     if (problems.length > 0) {

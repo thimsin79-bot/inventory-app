@@ -1,9 +1,11 @@
 /**
  * Checks the Supabase environment validation in lib/supabase/env.ts.
  *
- * There is no test framework in this project, and these helpers decide whether a
- * misconfigured deployment is served or refused, so they get a dependency-free
- * check that runs on the Node type stripper. Run with `npm run check:env`.
+ * There is no test framework in this project, and these helpers decide what a
+ * misconfigured deployment reports -- `readSupabaseEnv` throws the message the
+ * ConnectionStatus badge and the Supabase clients surface -- so they get a
+ * dependency-free check that runs on the Node type stripper. Run with
+ * `npm run check:env`.
  *
  * The cases below are deliberate: a blank dashboard variable is `''` rather than
  * `undefined`, and a verbatim copy of .env.example is syntactically valid. Both
@@ -121,13 +123,6 @@ check('still caught', env.supabaseEnvProblems().length === 2)
 console.log('real config is not mistaken for a placeholder')
 setEnv({ [URL_VAR]: GOOD_URL, [PUB_VAR]: 'sb_publishable_real' })
 check('clean', env.supabaseEnvProblems().length === 0)
-
-console.log('proxy response body')
-setEnv({})
-const body = env.unconfiguredMessage(env.supabaseEnvProblems())
-check('states the problem', /not configured/i.test(body))
-check('leaks no values', !/sb_[a-z]+_/.test(body))
-check('mentions rebuild', /rebuild/i.test(body))
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

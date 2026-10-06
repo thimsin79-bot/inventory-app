@@ -10,14 +10,12 @@ import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
-import { usePermissions } from '@/components/Permissions'
 
 type Row = Tables<'purchases'> & { supplier: Tables<'suppliers'> | null }
 
 const STATUSES = ['Pending', 'Partial', 'Received', 'Cancelled'] as const
 
 export default function PurchasesPage() {
-  const { writeOperational } = usePermissions()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -80,22 +78,20 @@ export default function PurchasesPage() {
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ]
 
-  if (writeOperational) {
-    columns.push({
-      key: 'actions',
-      header: '',
-      className: 'text-right',
-      render: (r) => (
-        <div className="flex flex-wrap justify-end gap-1">
-          {STATUSES.filter((s) => s !== r.status).map((s) => (
-            <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
-              {s}
-            </Button>
-          ))}
-        </div>
-      ),
-    })
-  }
+  columns.push({
+    key: 'actions',
+    header: '',
+    className: 'text-right',
+    render: (r) => (
+      <div className="flex flex-wrap justify-end gap-1">
+        {STATUSES.filter((s) => s !== r.status).map((s) => (
+          <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
+            {s}
+          </Button>
+        ))}
+      </div>
+    ),
+  })
 
   return (
     <>
@@ -103,11 +99,9 @@ export default function PurchasesPage() {
         title="Purchases"
         description="Purchase orders raised with suppliers."
         actions={
-          writeOperational ? (
-            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-              New purchase
-            </Button>
-          ) : undefined
+          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+            New purchase
+          </Button>
         }
       />
 

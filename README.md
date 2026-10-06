@@ -2,8 +2,10 @@
 
 Inventory management system built with Next.js 16 (App Router) and Supabase.
 
-All data access is client-side through `services/inventoryService.ts`, so the RLS policies in
-`supabase/schema.sql` are the only data boundary. Session reads go through `lib/supabase/dal.ts`.
+All data access is client-side through `services/inventoryService.ts`.
+
+**There is no authentication.** See [Access control](#access-control) below before you deploy
+this anywhere.
 
 ## Requirements
 
@@ -18,89 +20,70 @@ cp .env.example .env.local   # then fill in the values
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Every page except `/login` and `/signup`
-requires a session and will redirect there.
+Open [http://localhost:3000](http://localhost:3000). Every page is reachable — there is no
+login screen and no session to create.
 
 ## Environment variables
 
 `.env.local` is gitignored. Vercel does not read it, so each variable must also be set in the
-Vercel project's environment settings or every server-rendered page will fail.
+Vercel project's environment settings.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | Browser-safe key |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Legacy alias, still read by `lib/supabase/{client,server}.ts` |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | Server-only admin access, required by `/admin/users`. Bypasses RLS — never prefix with `NEXT_PUBLIC_` |
 
-The publishable key is designed to be public and ships in the client bundle. It is not a secret;
-row level security is what protects your data.
+The publishable key is designed to be public and ships in the client bundle. There is no
+server-side secret: no `SUPABASE_SERVICE_ROLE_KEY`, and nothing in the repo reads one.
 
-## Accounts
+## Access control
 
-Sign-up and sign-in take a **username and password only**. There is no email address and nothing is
-ever emailed. Supabase still requires an email-shaped identity, so the username is mapped internally
-to `<username>@users.invalid` — a reserved TLD that can never receive mail.
+This application has **no authentication, no sessions, no roles and no server-side user.** It
+holds one credential — the publishable key — and every request it makes reaches PostgREST as the
+`anon` role.
 
-That means no email confirmation and no self-service password reset. If someone forgets their
-password, an admin resets it at `/admin/users`, which needs `SUPABASE_SERVICE_ROLE_KEY` set. **Confirm
-email must be off** under Authentication → Sign In / Providers, or new accounts are created that can
-never sign in.
+`supabase/schema.sql` grants `anon` full read and write on all nine tables. **Those policies are
+not a security boundary.** They exist so the app functions. Anyone who reaches the Supabase
+project directly can read and write everything, because the key is public by design.
+
+The only gate is **Vercel Deployment Protection** (Project Settings → Deployment Protection),
+which 302s anonymous traffic to Vercel SSO:
+
+- while it is **on**, only users with an account in your Vercel team can open the app at all
+- if anyone turns it **off** to share a link, the inventory becomes world-writable at that URL,
+  and the Supabase project is reachable directly with the public key
+
+There is no per-user identity, so `transactions.created_by` and `requests.requested_by` are free
+text the UI types in — nothing validates or attributes them.
+
+Two limits do survive in the schema:
+
+- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests` and `audits`,
+  because no screen deletes them. `items` and the reference tables keep it.
+- `authenticated` is revoked on every table, so an account left over from before is not a way in.
 
 ## Database setup
 
 Run `supabase/schema.sql` in the Supabase SQL Editor, then `supabase/seed.sql` for sample data.
 
-Policies are gated on a role claim in `raw_app_meta_data`, so an account with no role sees nothing
-at all. There are four roles:
+The script generates two policies per table (`read`, `write`) inside one `DO` block rather than
+hand-writing thirty-six, and is re-runnable: it drops its own policies by name and retires the
+older role-ladder and public-access ones.
 
-| Role | Can do |
-| --- | --- |
-| `viewer` | read everything, change nothing |
-| `staff` | plus record movements, requests, audits and purchases |
-| `manager` | plus edit categories, warehouses, suppliers and departments |
-| `admin` | plus manage accounts and reset passwords |
+Running it makes the boundary match this repo. Until then, the live project holds whatever the
+previous run created — measured 2026-10-06, anon *can* read rows, but only `items` still has any
+data (2 rows; the other eight tables are empty), so also run `supabase/seed.sql` if you want a
+populated app.
 
-Assign a role by hand:
-
-```sql
-UPDATE auth.users
-SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}') || '{"role":"staff"}'
-WHERE email = 'alice@users.invalid';
-```
-
-Use `"role":"admin"` for your own account. The user must sign in again afterwards, because the
-claim is issued into their JWT at token creation.
-
-`/admin/users` does the same thing through a form, and also resets forgotten passwords. Both need
-`SUPABASE_SERVICE_ROLE_KEY`, which bypasses row-level security — that is why the page checks for the
-admin role before the service-role client is ever constructed.
-
-Keep open sign-up **enabled** under Authentication → Sign In / Providers. This app has no invite
-flow and no mailbox, so public sign-up is the only way to create an account; with it off nobody can
-register at all.
-
-**A new signup starts with no role.** Sign-up runs on the anon key, which cannot write
-`app_metadata`, so the account matches no policy until a role is set. That is harmless — it sees
-no rows — and the app says so explicitly rather than showing empty screens, since an unexplained
-blank app is indistinguishable from a broken one. Until then there is nothing to reach, so the nav
-is hidden as well.
-
-Set the **first** role by hand, with the statement above, or in Supabase → Authentication → the
-account → `app_metadata`. It has to be done outside the app: `/admin/users` needs you to be an
-admin already, and it refuses to demote the last one. Once a second admin exists, an admin can
-change their own role from that page — the check is "is another admin left", not "is this me".
-
-Sign out and back in afterwards. The role is baked into the JWT when the token is issued, so an
-existing session keeps the old claims until it expires (up to an hour).
-
-Run `npm run check` before deploying. `check:rls` diffs the policy matrix in `supabase/schema.sql`
-against the role model in `lib/roles.ts` and fails if they drift.
+Run `npm run check` before deploying. `check:rls` reads the policies back out of
+`supabase/schema.sql` and fails if a table is left uncovered, if the grants and the policies
+disagree, if `DELETE` leaks onto a table nothing deletes from, or if a role-ladder construct or a
+`FOR ALL` catch-all comes back.
 
 ## Deploying to Vercel
 
-See [deploy.md](deploy.md) for the full ordered checklist, including the Supabase-side redirect
-configuration that a Vercel deploy cannot complete on its own.
+See [deploy.md](deploy.md) for the full ordered checklist.
 
 Push to GitHub, then import the repository at [vercel.com/new](https://vercel.com/new). The
 framework preset, build command (`npm run build`), and output directory are all detected
@@ -109,17 +92,10 @@ automatically.
 Set the environment variables above in the project settings before the first deploy. Tick both
 **Production** and **Preview** so preview builds get them too.
 
-Add the deployment domain to Supabase under Authentication → URL Configuration → Redirect URLs,
-or sign-in will succeed and then 404 on the callback:
-
-```
-https://inventory-app-thimsin.vercel.app/auth/callback
-https://*.vercel.app/auth/callback
-```
-
-Not yet done as of 2026-10-05 — the Supabase project still has only the local origin configured.
-
-The wildcard covers preview deployments, which get a unique hostname per pull request.
+Leave **Deployment Protection on** while deciding how this is meant to be shared — it is the only
+thing standing between a public URL and a fully open inventory. If it must go off for non-Vercel
+users to see the app, an authentication layer has to be built first; configuration alone cannot
+replace it, because row level security has no identity to check.
 
 ### Automatic deployments
 
@@ -132,10 +108,12 @@ Git integration needs no further configuration once the repository is imported:
 ## Verifying a release
 
 ```bash
+npm run check    # check:env + check:rls
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
 `GET /api/supabase-test` reports connectivity and row counts against the configured project.
-It only reports whether a query errored, so it does not by itself prove that RLS is applied.
+It is unauthenticated and returns sample rows, so do not treat it as something to leave exposed
+for long — nothing in the app calls it.

@@ -1,40 +1,97 @@
 /**
- * Checks that the RLS policy matrix in supabase/schema.sql agrees with the role
- * model in lib/roles.ts.
+ * Checks the RLS boundary in supabase/schema.sql.
  *
- * The two have to agree or the app misbehaves in a way neither one reports on its
- * own: a role the UI believes can write will be refused by the database, or --
- * worse -- a role the UI believes is read-only will be allowed to write. The
- * policies are generated from arrays in the SQL, so this reads those arrays back
- * and diffs them against the TypeScript capabilities.
+ * There is no authentication and no role ladder, so the invariant this file guards
+ * is not a permission matrix. It is that the schema and the grants agree with each
+ * other, because that agreement is invisible when it breaks: a policy with no grant
+ * is `permission denied for table`, and a grant with no policy is zero rows. Both
+ * render as an empty table in the UI, which reads as "no data yet" rather than
+ * "misconfigured".
  *
- * It also checks that every table gets policies, because a table with RLS enabled
- * and no policy denies everything, which is very quiet in a UI that just renders
- * empty tables.
+ * So it checks that:
+ *
+ *   - all nine tables are declared and all nine have RLS enabled
+ *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
+ *   - the policies target `anon`, which is the role the publishable key presents
+ *   - `anon` is granted the same commands the policies cover
+ *   - DELETE stays withheld on the four tables no screen can delete from
+ *   - nothing from the removed role ladder survives (current_role, app_metadata)
+ *   - no table is left readable through a `FOR ALL USING (true)` catch-all
  *
  * Run with `npm run check:rls`.
  */
 
 import { readFileSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
-
-const [major, minor] = process.versions.node.split('.').map(Number)
-
-if (major < 22 || (major === 22 && minor < 6)) {
-  console.error(
-    `check:rls needs Node >= 22.6 for TypeScript type stripping (running ${process.versions.node}).`,
-  )
-  process.exit(1)
-}
-
-const roles = await import(
-  pathToFileURL(`${import.meta.dirname}/../lib/roles.ts`).href
-)
 
 const schema = readFileSync(
   `${import.meta.dirname}/../supabase/schema.sql`,
   'utf8',
 )
+
+/**
+ * The schema with `--` comments and `/* *\/` blocks removed.
+ *
+ * Assertions below are about what the script *executes*, and the prose in this
+ * file names the things it deliberately does not do any more ("no current_role",
+ * "not FOR ALL USING (true)"). Matching against the raw text would fail on its own
+ * explanation, so the comments come out first. Quote-aware, so a `--` inside a
+ * string literal is not mistaken for the start of a comment.
+ */
+function stripComments(sql) {
+  let out = ''
+  let quote = null
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i]
+    const next = sql[i + 1]
+
+    if (quote) {
+      out += char
+      if (char === quote) quote = null
+      continue
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char
+      out += char
+      continue
+    }
+
+    if (char === '-' && next === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++
+      out += '\n'
+      continue
+    }
+
+    if (char === '/' && next === '*') {
+      i += 2
+      while (i < sql.length && !(sql[i] === '*' && sql[i + 1] === '/')) i++
+      i++
+      continue
+    }
+
+    out += char
+  }
+
+  return out
+}
+
+const sql = stripComments(schema)
+
+const TABLES = [
+  'categories',
+  'suppliers',
+  'warehouses',
+  'departments',
+  'items',
+  'purchases',
+  'transactions',
+  'requests',
+  'audits',
+]
+
+/** Tables no screen deletes from, so DELETE is withheld at the grant. */
+const NO_DELETE = ['purchases', 'transactions', 'requests', 'audits']
 
 let passed = 0
 let failed = 0
@@ -49,110 +106,61 @@ function check(label, condition) {
   }
 }
 
-/** Pulls a `name text[] := ARRAY['a', 'b'];` declaration out of the policy block. */
-function arrayLiteral(name) {
-  const match = schema.match(
-    new RegExp(`${name}\\s+text\\[\\]\\s*:=\\s*ARRAY\\[([^\\]]*)\\]`),
-  )
-
-  if (!match) return null
-
-  return match[1]
-    .split(',')
-    .map((value) => value.trim().replace(/^'|'$/g, ''))
-    .filter(Boolean)
+console.log('tables')
+for (const table of TABLES) {
+  check(`${table} is declared`, sql.includes(`CREATE TABLE IF NOT EXISTS public.${table}`))
+  check(`${table} has RLS enabled`, sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`))
 }
-
-/** Every `CREATE TABLE IF NOT EXISTS public.<name>` in the file. */
-function createdTables() {
-  return [...schema.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].map(
-    (match) => match[1],
-  )
-}
-
-const referenceTables = arrayLiteral('reference_tables') ?? []
-const operationalTables = arrayLiteral('operational_tables') ?? []
-const readRoles = arrayLiteral('read_roles') ?? []
-const referenceRoles = arrayLiteral('reference_rw') ?? []
-const operationalRoles = arrayLiteral('operational_rw') ?? []
-
-const EXPECTED_REFERENCE = ['categories', 'suppliers', 'warehouses', 'departments']
-const EXPECTED_OPERATIONAL = ['items', 'purchases', 'transactions', 'requests', 'audits']
-
-console.log('every table has a policy')
-const tables = createdTables()
-check('nine tables are declared', tables.length === 9)
-for (const table of [...EXPECTED_REFERENCE, ...EXPECTED_OPERATIONAL]) {
-  check(`${table} is declared`, tables.includes(table))
-}
-for (const table of tables) {
-  check(
-    `${table} is classified exactly once`,
-    [...referenceTables, ...operationalTables].filter((t) => t === table).length === 1,
-  )
-}
-
-console.log('role lists match lib/roles.ts')
 check(
-  'read_roles is every known role',
-  readRoles.length === roles.ROLES.length &&
-    roles.ROLES.every((role) => readRoles.includes(role)),
-)
-check(
-  'reference_rw matches canWriteReference',
-  referenceRoles.every(
-    (role) =>
-      roles.isRole(role) &&
-      roles.CAPABILITIES[role].writeReference &&
-      roles.CAPABILITIES[role].read,
-  ),
-)
-check(
-  'operational_rw matches canWriteOperational',
-  operationalRoles.every(
-    (role) =>
-      roles.isRole(role) &&
-      roles.CAPABILITIES[role].writeOperational &&
-      roles.CAPABILITIES[role].read,
-  ),
-)
-check(
-  'every role that can write is listed for both table kinds or neither',
-  roles.ROLES.every((role) => {
-    const caps = roles.CAPABILITIES[role]
-    const inRef = referenceRoles.includes(role)
-    const inOps = operationalRoles.includes(role)
-
-    if (!caps.writeReference && !caps.writeOperational) return !inRef && !inOps
-    if (caps.writeReference && caps.writeOperational) return inRef && inOps
-
-    return caps.writeReference ? inRef && !inOps : inOps && !inRef
-  }),
-)
-check(
-  'a role missing from RLS would still be denied (fail closed)',
-  roles.ROLES.every((role) =>
-    readRoles.includes(role) || !(referenceRoles.includes(role) || operationalRoles.includes(role)),
-  ),
+  'nine tables are declared',
+  [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length,
 )
 
-console.log('policies are generated for every command')
+console.log('policies cover every command for anon')
 for (const command of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
-  check(`CREATE POLICY ... FOR ${command} is generated`, schema.includes(`FOR ${command} TO authenticated`))
+  check(`CREATE POLICY ... FOR ${command} TO anon is generated`, sql.includes(`FOR ${command} TO anon`))
 }
-check('policies target authenticated, so anon matches nothing', schema.includes('TO authenticated'))
-check('current_role reads app_metadata, not user_metadata', 
-  schema.includes("auth.jwt() -> 'app_metadata' ->> 'role'") &&
-  !schema.includes("auth.jwt() -> 'user_metadata' ->> 'role'"),
+check('every table gets both policies', sql.includes("'read on ' || t") && sql.includes("'write on ' || t"))
+check(
+  'policies target anon, which is what the publishable key presents',
+  !/FOR (SELECT|INSERT|UPDATE|DELETE) TO authenticated/.test(sql),
 )
-check('the role claim is a STABLE function so it is an InitPlan', /current_role\(\)[\s\S]*?LANGUAGE sql\s+STABLE/.test(schema))
 
-console.log('\nlegend')
-console.log('  reference  ' + referenceTables.join(', '))
-console.log('  operational ' + operationalTables.join(', '))
-console.log('  read        ' + readRoles.join(', '))
-console.log('  ref write   ' + referenceRoles.join(', '))
-console.log('  ops write   ' + operationalRoles.join(', '))
+console.log('grants match the policies')
+for (const table of TABLES) {
+  const expected = NO_DELETE.includes(table)
+    ? 'SELECT, INSERT, UPDATE'
+    : 'SELECT, INSERT, UPDATE, DELETE'
+
+  check(`${table} is granted ${expected} to anon`, sql.includes(`GRANT ${expected} ON public.${table} TO anon`))
+}
+check('no table is granted to authenticated', !/GRANT[^;]*TO authenticated/.test(sql))
+check(
+  'every table is revoked from authenticated',
+  TABLES.every((table) => sql.includes(`REVOKE ALL ON public.${table} FROM authenticated`)),
+)
+
+console.log('DELETE stays withheld where no screen deletes')
+for (const table of NO_DELETE) {
+  check(`${table} withholds DELETE`, !new RegExp(`GRANT[^;]*DELETE[^;]*ON public\\.${table} TO`).test(sql))
+}
+check('items keeps DELETE, the inventory screen deletes items', sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon'))
+
+console.log('the removed role ladder leaves nothing behind')
+// The teardown statements are allowed; what must not come back is a definition.
+check('current_role is never defined', !/CREATE[^;]*FUNCTION[^;]*current_role/i.test(sql))
+check('current_role is explicitly dropped', sql.includes('DROP FUNCTION IF EXISTS private.current_role()'))
+check('no app_metadata role claim', !sql.includes('app_metadata'))
+check('no user_metadata role claim', !sql.includes('user_metadata'))
+check('no role list arrays', !/text\[\]\s*:=\s*ARRAY\[\s*'admin'/.test(sql))
+check('the private schema is dropped', sql.includes('DROP SCHEMA IF EXISTS private CASCADE'))
+
+console.log('no permissive catch-all')
+check('no FOR ALL USING (true)', !/FOR ALL USING \(true\)/i.test(sql))
+check(
+  'policies are explicit per command',
+  !/FOR ALL\b/i.test(sql),
+)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
