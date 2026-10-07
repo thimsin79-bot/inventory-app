@@ -138,6 +138,16 @@ All reads and writes go through the **browser** Supabase client.
    Nothing in the repo executes SQL; run both files in the Supabase SQL editor, then re-run the
    probe above and confirm it still returns rows — a run that silently removes anon's access is
    exactly the failure `check:rls` cannot see.
+
+   **2026-10-07 — partial run.** The seven `items` columns added for the item form (`model`,
+   `description`, `serial_number`, `supplier_id`, `department_location`, `purchase_date`, `remark`)
+   were applied directly with a scoped PAT (permission Database → Read-write) through the
+   Management API `POST /v1/projects/{ref}/database/query`, then verified through PostgREST. The
+   token lives in `.env.local` as `SUPABASE_ACCESS_TOKEN` (gitignored) and was pasted into chat to
+   hand it over — rotate it per §5 item 3 once it is no longer needed. The policy, grant and
+   `private` schema changes in `schema.sql` are **still unapplied**: only the `ALTER TABLE`s ran.
+   Note the direct DB host `db.<ref>.supabase.co` is IPv6-only and the pooler name is NXDOMAIN, so
+   from this machine SQL can only be run through the Management API, not `psql`.
 2. **Vercel Deployment Protection is now load-bearing, not a preference.** It is the entire access
    boundary (§3). Make turning it off a deliberate decision, and note it currently also blocks
    ordinary staff, who need a Vercel account to see anything. See §8.
