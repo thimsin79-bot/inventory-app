@@ -178,11 +178,15 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 -- project is reached directly, the data is open. The policies below exist so the
 -- app functions, not so it is safe.
 --
--- Two policies per table, generated rather than written out longhand because nine
--- tables times four commands is thirty-six statements to keep in step:
+-- One policy per table per command -- four per table, generated rather than
+-- written out longhand because nine tables times four commands is thirty-six
+-- statements to keep in step. Policy names are unique per table, so the three
+-- write policies cannot share one name; each carries its command:
 --
---   read on <table>   SELECT
---   write on <table>  INSERT / UPDATE / DELETE
+--   read on <table>            SELECT
+--   write on <table> (insert)  INSERT
+--   write on <table> (update)  UPDATE
+--   write on <table> (delete)  DELETE
 --
 -- `TO anon` rather than the default `TO public`, so the grant is an accurate
 -- statement about who this is for. It also fails closed: if accounts are ever
@@ -200,12 +204,19 @@ DECLARE
   ];
 
   t text;
+  p record;
 BEGIN
   FOREACH t IN ARRAY all_tables LOOP
-    -- Drop first to keep this script re-runnable: a multi-statement script runs
-    -- in one implicit transaction, so a single duplicate-policy error would roll
-    -- all of it back. The role-ladder and pre-role-ladder policies are named here
-    -- too, so re-running retires them.
+    -- Drop every policy that already exists on the table. This script runs in
+    -- one implicit transaction, so a single duplicate-policy error would roll
+    -- all of it back, and a leftover policy from an earlier grant scheme would
+    -- otherwise keep granting access next to the ones created below. Dropping
+    -- by lookup rather than by name list also retires names this file has never
+    -- heard of. The role-ladder and pre-role-ladder policies are named here too,
+    -- so a re-run retires them even on a table where the lookup comes back empty.
+    FOR p IN SELECT polname FROM pg_policy WHERE polrelid = format('public.%I', t)::regclass LOOP
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', p.polname, t);
+    END LOOP;
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'staff_access on ' || t, t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public read access on ' || t, t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'Allow public modifications on ' || t, t);
@@ -219,17 +230,17 @@ BEGIN
 
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR INSERT TO anon WITH CHECK (true)',
-      'write on ' || t, t
+      'write on ' || t || ' (insert)', t
     );
 
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR UPDATE TO anon USING (true) WITH CHECK (true)',
-      'write on ' || t, t
+      'write on ' || t || ' (update)', t
     );
 
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR DELETE TO anon USING (true)',
-      'write on ' || t, t
+      'write on ' || t || ' (delete)', t
     );
   END LOOP;
 END
@@ -250,6 +261,21 @@ DROP SCHEMA IF EXISTS private CASCADE;
 -- (enforced for all projects on 2026-10-30), so these are granted explicitly
 -- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing `anon`
 -- access to anything added later by accident.
+-- Grants are additive, and the live database predates this file: an earlier run
+-- left `anon` with every table privilege, including DELETE on the four tables
+-- below and TRUNCATE / REFERENCES / TRIGGER anywhere -- none of which any screen
+-- uses. A grant is invisible next to a policy, so revoking first is what makes
+-- the GRANTs that follow the whole truth on any starting state.
+REVOKE ALL ON public.categories FROM anon;
+REVOKE ALL ON public.suppliers FROM anon;
+REVOKE ALL ON public.warehouses FROM anon;
+REVOKE ALL ON public.departments FROM anon;
+REVOKE ALL ON public.items FROM anon;
+REVOKE ALL ON public.purchases FROM anon;
+REVOKE ALL ON public.transactions FROM anon;
+REVOKE ALL ON public.requests FROM anon;
+REVOKE ALL ON public.audits FROM anon;
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO anon;
