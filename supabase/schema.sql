@@ -84,6 +84,11 @@ ALTER TABLE public.items ADD COLUMN IF NOT EXISTS department_location TEXT;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS purchase_date DATE;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS remark TEXT;
 
+-- PostgREST caches the schema it exposes; without this the API keeps answering
+-- "Could not find the 'x' column of 'items' in the schema cache" until its next
+-- automatic reload, even though the column exists.
+NOTIFY pgrst 'reload schema';
+
 -- 7. Purchases
 CREATE TABLE IF NOT EXISTS public.purchases (
     id TEXT PRIMARY KEY,
