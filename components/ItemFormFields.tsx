@@ -5,6 +5,7 @@ import { Input, Label, Select, Textarea } from './ui'
 
 export type ItemFormState = {
   name: string
+  category_id: string
   brand: string
   model: string
   description: string
@@ -19,6 +20,7 @@ export type ItemFormState = {
 
 export const EMPTY_ITEM: ItemFormState = {
   name: '',
+  category_id: '',
   brand: '',
   model: '',
   description: '',
@@ -35,6 +37,7 @@ export const EMPTY_ITEM: ItemFormState = {
 export function itemToForm(item: Tables<'items'>): ItemFormState {
   return {
     name: item.name,
+    category_id: item.category_id ?? '',
     brand: item.brand ?? '',
     model: item.model ?? '',
     description: item.description ?? '',
@@ -54,8 +57,8 @@ export function itemToForm(item: Tables<'items'>): ItemFormState {
  *
  * The row carries no barcode: the form does not ask for one, so the create
  * path fills it in from `nextBarcode()`. Columns the form does not manage
- * (unit, cost, min_qty, status, category, warehouse) are left out too and take
- * their column defaults on insert, or their existing value on update.
+ * (unit, cost, min_qty, status, warehouse) are left out too and take their
+ * column defaults on insert, or their existing value on update.
  */
 export function itemFormToRow(
   form: ItemFormState,
@@ -74,6 +77,7 @@ export function itemFormToRow(
     errors,
     row: {
       name: form.name.trim(),
+      category_id: form.category_id || null,
       brand: form.brand.trim() || null,
       model: form.model.trim() || null,
       description: form.description.trim() || null,
@@ -92,11 +96,13 @@ export function ItemFormFields({
   form,
   onChange,
   errors,
+  categories,
   suppliers,
 }: {
   form: ItemFormState
   onChange: (next: ItemFormState) => void
   errors: Partial<Record<keyof ItemFormState, string>>
+  categories: Pick<Tables<'categories'>, 'id' | 'name'>[]
   suppliers: Pick<Tables<'suppliers'>, 'id' | 'company'>[]
 }) {
   const set = <K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) =>
@@ -106,6 +112,16 @@ export function ItemFormFields({
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Item Name" error={errors.name} id="item-name">
         <Input id="item-name" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Whiteboard Marker" />
+      </Field>
+      <Field label="Category" id="item-category">
+        <Select id="item-category" value={form.category_id} onChange={(e) => set('category_id', e.target.value)}>
+          <option value="">— none —</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
       </Field>
       <Field label="Brand" id="item-brand">
         <Input id="item-brand" value={form.brand} onChange={(e) => set('brand', e.target.value)} placeholder="Optional" />
@@ -156,7 +172,7 @@ export function ItemFormFields({
           placeholder="e.g. Grade 10 Office"
         />
       </Field>
-      <Field label="User Remark" id="item-remark" full>
+      <Field label="User Remark" id="item-remark">
         <Textarea
           id="item-remark"
           value={form.remark}
@@ -172,17 +188,15 @@ function Field({
   label,
   error,
   id,
-  full,
   children,
 }: {
   label: string
   error?: string
   id: string
-  full?: boolean
   children: React.ReactNode
 }) {
   return (
-    <div className={full ? 'sm:col-span-2' : undefined}>
+    <div>
       <Label htmlFor={id}>{label}</Label>
       {children}
       {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}

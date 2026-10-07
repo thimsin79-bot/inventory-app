@@ -258,6 +258,7 @@ export default function InventoryPage() {
           form={form}
           onChange={setForm}
           errors={formErrors}
+          categories={categoriesData}
           suppliers={suppliersData}
         />
       </Modal>
