@@ -2,7 +2,7 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 6, 2026
+**Last Updated:** October 7, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
@@ -21,11 +21,10 @@ string unique to one commit. See §8.
 - **Supabase** `@supabase/ssr` + `@supabase/supabase-js` (the latter only for the `SupabaseClient` type)
 - Node v24.21.0, npm 11, path alias `@/*`
 - Supabase project `bktxzesvtmgcmznsfnlu` (`ap-southeast-2`).
-  **`supabase/schema.sql` has not been re-run since the auth removal**, so the live policies are
-  whatever the last run produced. Measured 2026-10-06 with the publishable key directly: anon **can**
-  read rows (so the live policies are *not* the `('admin','staff')` ones §5 used to claim), but the
-  data is far below §4's counts — `items` returns 2 rows and the other eight tables return 0. Run the
-  file and then re-measure; see §5 item 1.
+  **`supabase/schema.sql` and `supabase/seed.sql` were run in full on 2026-10-07** through the
+  Management API (§9). Live policies are the repo's `TO anon USING (true)`, grants match the file,
+  and the seeded row counts in §4 are back. Verified the same day through PostgREST with the
+  publishable key: anon reads all nine tables.
 - **No test framework, and deliberately none.** Two dependency-free Node scripts hold the logic a
   test runner would otherwise cover: `npm run check` = `check:env` + `check:rls`, 22 / 49 assertions.
   `check:env` imports `lib/supabase/env.ts` directly via Node's type stripping. Then `npm run lint`,
@@ -106,11 +105,10 @@ Eight of the nine tables use `TEXT` primary keys with no default, so ids are gen
 `REQ00017`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, because it
 arrived in a later change. Earlier notes here claimed all nine were `TEXT`; only eight are.
 
-Row counts are **stale in the old notes** and were re-measured 2026-10-06 with the publishable key:
-items 2, and categories / warehouses / suppliers / departments / purchases / transactions / requests /
-audits all 0. The previously recorded numbers (categories 9, items 21, warehouses 5, suppliers 5,
-departments 6, purchases 6, transactions 7, requests 7, audits 5) describe seeded data that is no
-longer in the project. `supabase/seed.sql` will put reference data back.
+Row counts, re-measured 2026-10-07 after `supabase/seed.sql` was run against the live project:
+items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6, transactions 7,
+requests 7, audits 5. The 2026-10-06 measurement (items 2, everything else 0) described the
+emptied project before the seed; the file is idempotent and puts the reference data back.
 
 All reads and writes go through the **browser** Supabase client.
 
@@ -118,43 +116,31 @@ All reads and writes go through the **browser** Supabase client.
 
 ## 5. Open Issues — Do These Next
 
-1. **`supabase/schema.sql` has not been run since the auth removal** (no DB password, no `psql`, no
-   Docker on this machine). It is the only step that makes the boundary match the repo: the repo now
-   says `TO anon USING (true)` with grants to `anon` and `private.current_role()` dropped, and the
-   live project still holds whatever the previous run created.
+1. **Closed 2026-10-07 — `supabase/schema.sql` has now been run since the auth removal, together
+   with `supabase/seed.sql`.** Two real bugs surfaced on the way there and are fixed in the file:
+   the `DO` block created `write on <table>` three times (policy names are unique per table, so the
+   second `CREATE POLICY` errored and rolled the whole script back), and grants are additive — the
+   live project still carried `DELETE`, `TRUNCATE`, `REFERENCES` and `TRIGGER` for `anon` on all
+   nine tables from an earlier scheme, which the `GRANT`s in the file could not remove. `schema.sql`
+   now drops every existing policy by lookup and runs `REVOKE ALL ... FROM anon` before granting, so
+   a re-run converges from any starting state.
 
-   **Measured 2026-10-06, with the publishable key directly against PostgREST** — read-only, one
-   `select=*&count=exact` per table:
-
-   | | categories | items | warehouses | suppliers | departments | purchases | transactions | requests | audits |
-   | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-   | observed | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-
-   Two things follow. **Anon can read**, so the live policies are *not* the `('admin','staff')` ones
-   this file used to assert — that claim was stale, and the app is not currently blank. And **the data
-   is gone**: the row counts this file used to list (items 21, categories 9, …) are not what is in the
-   project any more, so re-run `supabase/seed.sql` alongside the schema if you want a populated app.
-
-   Nothing in the repo executes SQL; run both files in the Supabase SQL editor, then re-run the
-   probe above and confirm it still returns rows — a run that silently removes anon's access is
-   exactly the failure `check:rls` cannot see.
-
-   **2026-10-07 — partial run.** The seven `items` columns added for the item form (`model`,
-   `description`, `serial_number`, `supplier_id`, `department_location`, `purchase_date`, `remark`)
-   were applied directly with a scoped PAT (permission Database → Read-write) through the
-   Management API `POST /v1/projects/{ref}/database/query`, then verified through PostgREST. The
-   token lives in `.env.local` as `SUPABASE_ACCESS_TOKEN` (gitignored) and was pasted into chat to
-   hand it over — rotate it per §5 item 3 once it is no longer needed. The policy, grant and
-   `private` schema changes in `schema.sql` are **still unapplied**: only the `ALTER TABLE`s ran.
-   Note the direct DB host `db.<ref>.supabase.co` is IPv6-only and the pooler name is NXDOMAIN, so
-   from this machine SQL can only be run through the Management API, not `psql`.
+   Verified against the live project the same day: the publishable key reads all nine tables
+   through PostgREST (9 / 21 / 5 / 5 / 6 / 6 / 7 / 7 / 5 rows) including the seven new `items`
+   columns; `pg_policy` holds exactly 36 policies, every one `TO anon`; `role_table_grants` gives
+   `anon` exactly SELECT, INSERT, UPDATE, DELETE — DELETE withheld on purchases, transactions,
+   requests, audits — and `authenticated` nothing. That probe is the half `check:rls` cannot
+   cover: the script reads the file, not the database, so re-run it after any future SQL run.
+   How to reach the database from this machine: §9.
 2. **Vercel Deployment Protection is now load-bearing, not a preference.** It is the entire access
    boundary (§3). Make turning it off a deliberate decision, and note it currently also blocks
    ordinary staff, who need a Vercel account to see anything. See §8.
 3. **Rotate credentials that were pasted into chat:** the account-scoped `sbp_…` personal access
-   token, the database password, and an `sb_secret_…` key. Create scoped PATs instead — a classic PAT
-   grants full account access. Prefer handing a token over by writing it to a gitignored file over
-   pasting it into the conversation, which is how the last one leaked. Independent of the auth change.
+   token, the database password, and an `sb_secret_…` key. The scoped Database Read-write PAT made
+   2026-10-07 (`.env.local`, `SUPABASE_ACCESS_TOKEN`) was pasted into chat too — rotate it once no
+   further SQL run needs it. Create scoped PATs instead — a classic PAT grants full account access.
+   Prefer handing a token over by writing it to a gitignored file over pasting it into the
+   conversation, which is how the last one leaked. Independent of the auth change.
 4. **Delete the stray account `probe@users.invalid`, id
    `43623ca5-781f-4671-8c46-53e7e84502c3`** — inert, and now doubly irrelevant since nothing reads
    an account, but it should still go. Dashboard → Authentication, or the `auth.identities` /
@@ -287,5 +273,12 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
 - `.env*` is gitignored. Keep `.env.example` in sync with the variables the code actually reads:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
   There is **no** `SUPABASE_SERVICE_ROLE_KEY` any more — nothing in the repo reads it.
+- **Running SQL from this machine:** no `psql`, no Supabase CLI, and no usable network path to the
+  database — `db.<ref>.supabase.co` has no A record (IPv6-only) and this machine has no IPv6 route,
+  and the pooler hostname is NXDOMAIN. The only route is the Management API
+  `POST https://api.supabase.com/v1/projects/bktxzesvtmgcmznsfnlu/database/query` with a **scoped
+  PAT (permission Database → Read-write)**; one lives in `.env.local` as `SUPABASE_ACCESS_TOKEN`.
+  It answers 201 on success. `schema.sql` and `seed.sql` are idempotent and safe to re-run; verify
+  anon access afterwards with the probe in §5 item 1.
 - `NEXT_PUBLIC_*` values ship to the browser. There is no server-side secret to protect, because
   nothing in this app runs with elevated database access.
