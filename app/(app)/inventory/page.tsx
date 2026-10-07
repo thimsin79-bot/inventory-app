@@ -9,6 +9,7 @@ import {
   recordTransaction,
   getCategories,
   getWarehouses,
+  getSuppliers,
 } from '@/services/inventoryService'
 import type { Tables, Inserts } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
@@ -53,9 +54,11 @@ export default function InventoryPage() {
   const items = useAsyncData(loadItems)
   const categories = useAsyncData(getCategories)
   const warehouses = useAsyncData(getWarehouses)
+  const suppliers = useAsyncData(getSuppliers)
 
   const categoriesData = categories.data ?? []
   const warehousesData = warehouses.data ?? []
+  const suppliersData = suppliers.data ?? []
 
   const lowStock = useMemo(
     () => (items.data ?? []).filter((i) => i.qty <= i.min_qty),
@@ -256,6 +259,7 @@ export default function InventoryPage() {
           errors={formErrors}
           categories={categoriesData}
           warehouses={warehousesData}
+          suppliers={suppliersData}
         />
       </Modal>
 

@@ -54,16 +54,35 @@ CREATE TABLE IF NOT EXISTS public.items (
     name TEXT NOT NULL,
     category_id TEXT REFERENCES public.categories(id) ON DELETE SET NULL,
     brand TEXT,
+    model TEXT,
+    description TEXT,
+    serial_number TEXT,
     unit TEXT NOT NULL DEFAULT 'Pc',
     cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     price NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     min_qty INTEGER NOT NULL DEFAULT 0,
     qty INTEGER NOT NULL DEFAULT 0,
     warehouse_id TEXT REFERENCES public.warehouses(id) ON DELETE SET NULL,
+    supplier_id TEXT REFERENCES public.suppliers(id) ON DELETE SET NULL,
+    department_location TEXT,
+    purchase_date DATE,
+    remark TEXT,
     status TEXT NOT NULL DEFAULT 'Active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Columns added after the first deploy. `CREATE TABLE IF NOT EXISTS` above is a
+-- no-op on a database that already has `items`, so these ALTERs are what actually
+-- apply the new fields to the live table. Each is idempotent: a re-run of this
+-- file is expected (see CLAUDE.md section 5).
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS supplier_id TEXT REFERENCES public.suppliers(id) ON DELETE SET NULL;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS department_location TEXT;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS purchase_date DATE;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS remark TEXT;
 
 -- 7. Purchases
 CREATE TABLE IF NOT EXISTS public.purchases (

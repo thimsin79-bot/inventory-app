@@ -127,12 +127,19 @@ export interface Database {
           name: string
           category_id: string | null
           brand: string | null
+          model: string | null
+          description: string | null
+          serial_number: string | null
           unit: string
           cost: number
           price: number
           min_qty: number
           qty: number
           warehouse_id: string | null
+          supplier_id: string | null
+          department_location: string | null
+          purchase_date: string | null
+          remark: string | null
           status: string
           created_at: string
           updated_at: string
@@ -143,12 +150,19 @@ export interface Database {
           name: string
           category_id?: string | null
           brand?: string | null
+          model?: string | null
+          description?: string | null
+          serial_number?: string | null
           unit?: string
           cost?: number
           price?: number
           min_qty?: number
           qty?: number
           warehouse_id?: string | null
+          supplier_id?: string | null
+          department_location?: string | null
+          purchase_date?: string | null
+          remark?: string | null
           status?: string
           created_at?: string
           updated_at?: string
@@ -159,12 +173,19 @@ export interface Database {
           name?: string
           category_id?: string | null
           brand?: string | null
+          model?: string | null
+          description?: string | null
+          serial_number?: string | null
           unit?: string
           cost?: number
           price?: number
           min_qty?: number
           qty?: number
           warehouse_id?: string | null
+          supplier_id?: string | null
+          department_location?: string | null
+          purchase_date?: string | null
+          remark?: string | null
           status?: string
           created_at?: string
           updated_at?: string
@@ -182,6 +203,13 @@ export interface Database {
             columns: ["warehouse_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           }
         ]
