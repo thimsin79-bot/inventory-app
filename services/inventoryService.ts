@@ -145,6 +145,32 @@ export async function getRequests(client?: Client) {
 }
 
 /**
+ * Next free barcode for a new item.
+ *
+ * The item form does not ask for a barcode, so the create path calls this
+ * instead. Barcodes are `SCH` plus a zero-padded number, which keeps them in
+ * numeric order lexically, so one descending read finds the top one. Two
+ * concurrent creates can still collide on the unique constraint; the loser
+ * gets the Postgres error surfaced by `createItem` and can retry.
+ */
+export async function nextBarcode(client?: Client): Promise<string> {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('items')
+    .select('barcode')
+    .like('barcode', 'SCH%')
+    .order('barcode', { ascending: false })
+    .limit(1)
+
+  if (error) throw error
+
+  const top = data?.[0]?.barcode ?? ''
+  const highest = Number.parseInt(top.slice(3), 10)
+  const next = Number.isNaN(highest) ? 1 : highest + 1
+  return `SCH${String(next).padStart(6, '0')}`
+}
+
+/**
  * Create a new inventory item
  */
 export async function createItem(item: Inserts<'items'>, client?: Client) {

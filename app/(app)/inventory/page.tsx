@@ -10,6 +10,7 @@ import {
   getCategories,
   getWarehouses,
   getSuppliers,
+  nextBarcode,
 } from '@/services/inventoryService'
 import type { Tables, Inserts } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
@@ -105,7 +106,7 @@ export default function InventoryPage() {
 
     const ok = editing
       ? await run(() => updateItem(editing.id, row), `Updated ${row.name}`)
-      : await run(() => createItem(row), `Created ${row.name}`)
+      : await run(async () => createItem({ ...row, barcode: await nextBarcode() }), `Created ${row.name}`)
 
     if (ok) {
       setEditing(null)
@@ -257,8 +258,6 @@ export default function InventoryPage() {
           form={form}
           onChange={setForm}
           errors={formErrors}
-          categories={categoriesData}
-          warehouses={warehousesData}
           suppliers={suppliersData}
         />
       </Modal>
