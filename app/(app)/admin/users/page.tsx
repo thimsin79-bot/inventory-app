@@ -71,7 +71,6 @@ export default function AdminUsersPage() {
       return
     }
     setUnlockError(null)
-    setSecretInput('')
     writeAdminSecret(value)
     setVerifying(true)
     users.reload()
@@ -231,6 +230,10 @@ export default function AdminUsersPage() {
     ),
   })
 
+  const activeUnlockError =
+    unlockError ??
+    (users.error && users.error !== 'Admin console secret required.' ? users.error : null)
+
   return (
     <>
       <PageHeader
@@ -271,9 +274,9 @@ export default function AdminUsersPage() {
                 server. It is kept for this tab only.
               </p>
             </div>
-            {!verifying && (unlockError ?? users.error) && (
+            {!verifying && activeUnlockError && (
               <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-                {unlockError ?? users.error}
+                {activeUnlockError}
               </p>
             )}
             <Button variant="primary" onClick={submitUnlock} disabled={verifying}>
