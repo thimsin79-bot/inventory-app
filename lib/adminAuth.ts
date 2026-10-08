@@ -50,7 +50,7 @@ function lit(value: string): string {
 }
 
 async function runSql(query: string): Promise<Record<string, unknown>[]> {
-  const token = process.env.SUPABASE_ACCESS_TOKEN
+  const token = process.env.SUPABASE_ACCESS_TOKEN?.trim()
   if (!token) {
     throw new Error(
       'SUPABASE_ACCESS_TOKEN is not set — the Admin Console needs a Database Read-write PAT in .env.local (see .env.example).',
