@@ -6,6 +6,7 @@ import {
   deleteAdminUser,
   getAdminUsers,
   updateAdminUser,
+  writeAdminSecret,
   type AdminUser,
 } from '@/services/adminUsersService'
 import { errorMessage } from '@/utils/errors'
@@ -47,7 +48,34 @@ export default function AdminUsersPage() {
   const [banning, setBanning] = useState<AdminUser | null>(null)
   const [deleting, setDeleting] = useState<AdminUser | null>(null)
 
-  const users = useAsyncData(getAdminUsers)
+  const [secretInput, setSecretInput] = useState('')
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
+  const loadUsers = useCallback(async () => {
+    try {
+      return await getAdminUsers()
+    } finally {
+      setVerifying(false)
+    }
+  }, [])
+
+  const users = useAsyncData(loadUsers)
+
+  const locked = users.errorCode === 'ADMIN_SECRET'
+
+  function submitUnlock() {
+    const value = secretInput.trim()
+    if (!value) {
+      setUnlockError('Enter the admin console secret.')
+      return
+    }
+    setUnlockError(null)
+    setSecretInput('')
+    writeAdminSecret(value)
+    setVerifying(true)
+    users.reload()
+  }
 
   const run = useCallback(
     async (fn: () => Promise<unknown>, success: string) => {
@@ -209,9 +237,11 @@ export default function AdminUsersPage() {
         title="Admin Console — Users"
         description={users.data ? `${users.data.length} accounts` : undefined}
         actions={
-          <Button variant="primary" onClick={openCreate}>
-            New user
-          </Button>
+          locked ? undefined : (
+            <Button variant="primary" onClick={openCreate}>
+              New user
+            </Button>
+          )
         }
       />
 
@@ -220,37 +250,72 @@ export default function AdminUsersPage() {
         enforced yet — sign-in has not been built.
       </p>
 
-      {notice && (
-        <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-          {notice}
-        </p>
-      )}
-      {actionError && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-          {actionError}
-        </p>
-      )}
-
-      <Card>
-        <AsyncBoundary
-          loading={users.loading}
-          error={users.error}
-          errorCode={users.errorCode}
-          onRetry={users.reload}
-        >
-          <DataTable
-            columns={columns}
-            rows={users.data ?? []}
-            rowKey={(r) => r.id}
-            empty={
-              <EmptyState
-                title="No accounts yet"
-                hint="Create the first account with New user."
+      {locked ? (
+        <Card>
+          <div className="space-y-4 p-4 sm:p-6">
+            <div>
+              <Label htmlFor="admin-console-secret">Admin console secret</Label>
+              <Input
+                id="admin-console-secret"
+                type="password"
+                value={secretInput}
+                onChange={(e) => setSecretInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitUnlock()
+                }}
+                placeholder="Shared secret for this console"
+                autoFocus
               />
-            }
-          />
-        </AsyncBoundary>
-      </Card>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                This console is locked until the secret matches ADMIN_CONSOLE_SECRET on the
+                server. It is kept for this tab only.
+              </p>
+            </div>
+            {!verifying && (unlockError ?? users.error) && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
+                {unlockError ?? users.error}
+              </p>
+            )}
+            <Button variant="primary" onClick={submitUnlock} disabled={verifying}>
+              {verifying ? 'Checking…' : 'Unlock'}
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {notice && (
+            <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+              {notice}
+            </p>
+          )}
+          {actionError && (
+            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
+              {actionError}
+            </p>
+          )}
+
+          <Card>
+            <AsyncBoundary
+              loading={users.loading}
+              error={users.error}
+              errorCode={users.errorCode}
+              onRetry={users.reload}
+            >
+              <DataTable
+                columns={columns}
+                rows={users.data ?? []}
+                rowKey={(r) => r.id}
+                empty={
+                  <EmptyState
+                    title="No accounts yet"
+                    hint="Create the first account with New user."
+                  />
+                }
+              />
+            </AsyncBoundary>
+          </Card>
+        </>
+      )}
 
       <Modal
         open={creating}

@@ -10,13 +10,53 @@ export type AdminUser = {
   permissions: PermissionKey[]
 }
 
+export const ADMIN_SECRET_HEADER = 'x-admin-secret'
+
+const STORAGE_KEY = 'admin-console-secret'
+
+export class AdminSecretError extends Error {
+  code = 'ADMIN_SECRET'
+}
+
+function readAdminSecret(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function writeAdminSecret(value: string): void {
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, value.trim())
+  } catch {
+    // storage unavailable — the next request simply goes out unauthenticated
+  }
+}
+
+export function clearAdminSecret(): void {
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // nothing to clear
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init)
+  const headers = new Headers(init?.headers)
+  const secret = readAdminSecret()
+  if (secret) headers.set(ADMIN_SECRET_HEADER, secret)
+
+  const res = await fetch(path, { ...init, headers })
   let body: { error?: string } = {}
   try {
     body = (await res.json()) as { error?: string }
   } catch {
     // empty body — fall through to the status-based message
+  }
+  if (res.status === 401) {
+    clearAdminSecret()
+    throw new AdminSecretError(body.error ?? 'Admin console secret required.')
   }
   if (!res.ok) {
     throw new Error(body.error ?? `Request failed (${res.status}).`)

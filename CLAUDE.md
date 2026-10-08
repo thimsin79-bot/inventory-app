@@ -2,7 +2,7 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 7, 2026
+**Last Updated:** October 8, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
@@ -25,9 +25,10 @@ string unique to one commit. See §8.
   Management API (§9). Live policies are the repo's `TO anon USING (true)`, grants match the file,
   and the seeded row counts in §4 are back. Verified the same day through PostgREST with the
   publishable key: anon reads all nine tables.
-- **No test framework, and deliberately none.** Two dependency-free Node scripts hold the logic a
-  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls`, 22 / 49 assertions.
-  `check:env` imports `lib/supabase/env.ts` directly via Node's type stripping. Then `npm run lint`,
+- **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
+  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate`,
+  22 / 49 / 22 assertions. `check:env` imports `lib/supabase/env.ts` directly via Node's type
+  stripping, `check:gate` imports `lib/adminGate.ts` the same way. Then `npm run lint`,
   `npx tsc --noEmit`, `npm run build`.
 
 ---
@@ -44,14 +45,15 @@ components/               flat: ui.tsx, Nav, DataTable, Modal, forms, Connection
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
 lib/supabase/             client.ts, server.ts, env.ts
 lib/adminAuth.ts          server-only Auth-user CRUD over the Management API (reads SUPABASE_ACCESS_TOKEN)
+lib/adminGate.ts          the Admin Console gate: x-admin-secret vs ADMIN_CONSOLE_SECRET, fail closed
 lib/permissions.ts        permission catalog; stored in app_metadata.permissions, unenforced (see §5)
 services/inventoryService.ts   all data access, browser Supabase client
-services/adminUsersService.ts  Admin Console fetch layer over /api/admin/users
+services/adminUsersService.ts  Admin Console fetch layer over /api/admin/users (holds the secret per tab)
 supabase/schema.sql       tables + RLS: anon read/write, policies generated in one DO block
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
 utils/format.ts, utils/errors.ts  live helpers
-scripts/                  check-supabase-env.mjs, check-rls.mjs
+scripts/                  check-supabase-env.mjs, check-rls.mjs, check-admin-gate.mjs
 ```
 
 What used to be here and is **not**: `app/(auth)/`, `app/auth/`, `app/actions/`, `lib/auth.ts`,
@@ -71,15 +73,18 @@ plus the Admin Console `/admin/users`.
 
 ## 3. Access control — read this before touching RLS
 
-**There is no authentication, no session, no role, and no server-side user.** The app holds exactly
-one credential: the publishable key, which `lib/supabase/{client,server}.ts` reads and sends to the
-browser. PostgREST presents that key as the `anon` role, so every request this app makes is an `anon`
-request. There is nothing in a JWT to branch on, because there is no session.
+**There is no authentication, no session, no role, and no server-side user.** On the data path the
+app holds exactly one credential: the publishable key, which `lib/supabase/{client,server}.ts` reads
+and sends to the browser. PostgREST presents that key as the `anon` role, so every request this app
+makes is an `anon` request. There is nothing in a JWT to branch on, because there is no session.
 
 The one exception is the Admin Console (`/admin/users`): its route handlers hold the Management-API
 PAT (`SUPABASE_ACCESS_TOKEN`) and run SQL against `auth.users` on the server
 (`lib/adminAuth.ts`). That is a server-side credential, not a session — there is still no login page
-and nothing identifies the visitor, so anyone who reaches the app can use the console (§5 item 4).
+and nothing identifies the visitor. Since 2026-10-08 every handler calls `adminSecretGate`
+(`lib/adminGate.ts`) first, so a caller must present `x-admin-secret` matching the server-only
+`ADMIN_CONSOLE_SECRET` or get 401 (503 when the variable is unset — it fails closed). That is one
+shared password for everybody, not identity: anyone who knows it is an admin (§5 item 4).
 
 Consequences:
 
@@ -153,15 +158,17 @@ All reads and writes go through the **browser** Supabase client.
    console's 502 message is acceptable, or create a fresh one first. Create scoped PATs instead — a
    classic PAT grants full account access. Prefer handing a token over by writing it to a gitignored
    file over pasting it into the conversation, which is how the last one leaked.
-4. **The Admin Console is unauthenticated — currently the widest hole in the system.** `/admin/users`
-   and `/api/admin/users*` have no identity check of any kind: anyone who reaches the app (past the
-   single Vercel gate, §2/§8) can create accounts, reset passwords, and ban or delete users, because
-   the route handlers run as the Management-API PAT and there is nothing to compare the request
-   against. The deleted role ladder at least gated controls; this console everything. Fix, in order:
-   (a) gate `/api/admin/users*` behind a shared-secret header or HTTP basic auth so the route is
-   inert to anonymous callers; (b) then build real sign-in so `admin.view` / `admin.manage` in
-   `lib/permissions.ts` mean something. The permissions are stored in `app_metadata.permissions` and
-   currently **enforced nowhere** — the Users screen itself says so.
+4. **The Admin Console — (a) done 2026-10-08, (b) still open.** (a) Every handler in
+   `app/api/admin/users/*` now calls `adminSecretGate` before it touches the Management-API PAT, so
+   an anonymous caller gets `401 Admin console secret required.` instead of a user list, and a
+   deployment without `ADMIN_CONSOLE_SECRET` gets `503` rather than an open door. The secret is
+   server-only (no `NEXT_PUBLIC_` prefix — that would ship it in the JS bundle and gate nothing);
+   the Users screen prompts for it once per tab and keeps it in `sessionStorage`. `npm run
+   check:gate` guards the wiring as well as the decision function, and was proved to fail by
+   deleting a gate call. (b) is still the real fix: the secret is one value shared by everyone who
+   uses the console, it identifies nobody, and `admin.view` / `admin.manage` in `lib/permissions.ts`
+   remain **enforced nowhere** — the stored `app_metadata.permissions` mean nothing until sign-in
+   exists, and the Users screen still says so.
 5. **The stray probe account `probe@users.invalid` (id `43623ca5-…`) is gone** — `listAuthUsers`
    no longer shows it (verified 2026-10-07). The three remaining accounts are the test accounts
    `admin@users.invalid` and `app@users.invalid` plus the real `thimsin79@gmail.com`. Clean up the
@@ -176,6 +183,16 @@ All reads and writes go through the **browser** Supabase client.
    purchases, requests and audits have write paths.
 9. With no sessions, `lib/supabase/server.ts` exists only for `api/supabase-test`. If that route goes
    away, it and `createServerClient` go with it.
+10. **Closed 2026-10-08 — the Admin Console's production 502.** `/api/admin/users` answered
+    `{"error":"Cannot convert argument to a ByteString because the character at index 7 …65279…"}`
+    in production while working locally. Index 7 of `Bearer <token>` is the first character of the
+    token, and 65279 is U+FEFF: the `SUPABASE_ACCESS_TOKEN` stored in Vercel began with a BOM, which
+    `fetch` refuses to put in a header. Fixed by rewriting the variable from the clean value in
+    `.env.local` (`vercel env rm` then `vercel env add … < file`, with the file written by Node) and
+    by `runSql` now trimming the token, so a pasted BOM cannot break it again. Two lessons: an env
+    change only reaches the site on a **new deployment** (`vercel redeploy <url>`, ~40s), and
+    reading a Secret-typed variable back is impossible, so confirm the bytes by adding it as
+    `--no-sensitive`, `vercel env pull`, then re-adding it as a Secret.
 
 The stale deletion snippet for the old probe account (in case any live row is ever re-seeded):
 
@@ -206,7 +223,7 @@ DELETE FROM auth.users      WHERE id      = '43623ca5-781f-4671-8c46-53e7e84502c
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls  (22 / 49 assertions)
+npm run check          # check:env + check:rls + check:gate  (22 / 49 / 22 assertions)
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -220,6 +237,13 @@ four tables nothing deletes from, no `current_role`/`app_metadata`/role arrays l
 that cannot fail is not a guard, so when you add an assertion, prove it first by breaking the code it
 covers and confirming a FAIL.
 
+`check:gate` is the equivalent for `lib/adminGate.ts` and the two Admin Console routes: it runs the
+gate against a real `Request` (missing env → 503, wrong/absent header → 401, right header → null,
+padded value still matches) and separately asserts that **every** exported handler in
+`app/api/admin/users/*` calls it before any `lib/adminAuth` function, that the header name agrees
+between client and server, and that nothing outside `lib/adminGate.ts` reads `ADMIN_CONSOLE_SECRET`.
+Deleting a `adminSecretGate(request)` line fails it — checked 2026-10-08.
+
 If you see `TS2307 Cannot find module '...app/(auth)/...'` from `.next/*/types/validator.ts`, those
 are stale generated route validators from a previous `next dev`. `Remove-Item -Recurse -Force .next`
 and rebuild; `next build` regenerates them.
@@ -231,7 +255,17 @@ redirect while Deployment Protection is on (§8):
 $site = "https://inventory-app-thimsin.vercel.app"
 curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" $site/          # 302 to vercel.com/sso-api
 curl.exe -s -o NUL -w "%{http_code}" "$site/login"                      # 404 now, no such route
-curl.exe -s -o NUL -w "%{http_code}" "$site/admin/users"                # 404 now, no such route
+curl.exe -s -o NUL -w "%{http_code}" "$site/admin/users"                # 302: it exists, behind the same gate
+```
+
+**`vercel curl` gets past Deployment Protection with the authenticated CLI**, which is the only
+credential-free way to read a response body from production. It is how §5 item 10 was diagnosed.
+The flag forms (`-o`, `-w`) are not intercepted, so pipe stdout instead:
+
+```powershell
+vercel curl -s https://inventory-app-thimsin.vercel.app/api/admin/users
+#   401 {"error":"Admin console secret required."}     <- the gate, working
+vercel curl -s -i https://inventory-app-thimsin.vercel.app/api/admin/users   # status + headers
 ```
 
 Locally (a dev server is usually already listening on :3000):
@@ -268,7 +302,10 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
   Settings → Environment Variables, or `/api/admin/users*` returns 502 with an actionable message
   that the Users screen shows. It is read only on the server by `lib/adminAuth.ts` and never ships to
   the browser. `.env.local` carries a working Database Read-write PAT for local development; Vercel
-  needs its own copy with the same scope.
+  needs its own copy with the same scope. `ADMIN_CONSOLE_SECRET` is the second one (§3): without it
+  the routes answer 503 and the Users screen stays locked. Both are server-only, and the same
+  secret value in `.env.local` and Vercel means staff type it once. **Changing an env var does
+  nothing for the live site until a new deployment exists** — `vercel redeploy <url>` or a push.
 - **Verifying a deploy with no credentials — and its limit.** Pick a string that exists in exactly
   one commit, confirm it is absent from the parent (`git show <old-sha>:<file> | Select-String
   <string>`), then grep the production HTML for it. Signature blocks in the HTML are useless for this
@@ -298,7 +335,8 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
   version has breaking changes (see `AGENTS.md`).
 - `.env*` is gitignored. Keep `.env.example` in sync with the variables the code actually reads:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  and the server-only `SUPABASE_ACCESS_TOKEN` (read by `lib/adminAuth.ts` for `/api/admin/users`).
+  and the two server-only ones: `SUPABASE_ACCESS_TOKEN` (read by `lib/adminAuth.ts`) and
+  `ADMIN_CONSOLE_SECRET` (read by `lib/adminGate.ts`).
   Never put a `NEXT_PUBLIC_` prefix on the token. There is **no** `SUPABASE_SERVICE_ROLE_KEY` any
   more — nothing in the repo reads it.
 - **Running SQL from this machine:** no `psql`, no Supabase CLI, and no usable network path to the
@@ -309,4 +347,9 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
   It answers 201 on success. `schema.sql` and `seed.sql` are idempotent and safe to re-run; verify
   anon access afterwards with the probe in §5 item 1.
 - `NEXT_PUBLIC_*` values ship to the browser. There is no server-side secret to protect, because
-  nothing in this app runs with elevated database access.
+  nothing in this app runs with elevated database access — except the two Admin Console variables
+  above, which are exactly the ones that must never get the prefix.
+- **A pasted env value can arrive with a UTF-8 BOM (U+FEFF)** in front of it, which is invisible in
+  a dashboard and fatal in a header: `fetch` throws `Cannot convert argument to a ByteString … 65279`
+  at index 7 of `Bearer <token>` (§5 item 10). Write the file with Node rather than pasting, prefer
+  `vercel env add NAME env < file` over a PowerShell pipe, and the code trims anyway.

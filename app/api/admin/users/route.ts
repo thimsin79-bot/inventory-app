@@ -4,10 +4,14 @@ import {
   isDuplicateEmailError,
   listAuthUsers,
 } from '@/lib/adminAuth'
+import { adminSecretGate } from '@/lib/adminGate'
 import type { PermissionKey } from '@/lib/permissions'
 import { errorMessage } from '@/utils/errors'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const gate = adminSecretGate(request)
+  if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
   try {
     return NextResponse.json({ users: await listAuthUsers() })
   } catch (e) {
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const gate = adminSecretGate(request)
+  if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
   let body: Record<string, unknown>
   try {
     body = (await request.json()) as Record<string, unknown>
