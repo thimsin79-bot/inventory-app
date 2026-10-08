@@ -14,6 +14,7 @@ const LINKS = [
   { href: '/warehouses', label: 'Warehouses' },
   { href: '/suppliers', label: 'Suppliers' },
   { href: '/departments', label: 'Departments' },
+  { href: '/admin/users', label: 'Users' },
 ]
 
 export function Nav() {

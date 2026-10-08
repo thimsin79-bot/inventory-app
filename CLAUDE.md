@@ -37,12 +37,16 @@ string unique to one commit. See §8.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, suppressHydrationWarning
-  (app)/                  the 10 app screens + shared sidebar shell
+  (app)/                  the 10 app screens + shared sidebar shell; (app)/admin/users is the Admin Console
   api/supabase-test/      connection diagnostic (unauthenticated, see §5)
-components/               flat: ui.tsx, Nav, DataTable, Modal, forms, ConnectionStatus
+  api/admin/users/        Admin Console handlers: read/write Supabase Auth users via the Management API
+components/               flat: ui.tsx, Nav, DataTable, Modal, forms, ConnectionStatus, PermissionPicker
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
 lib/supabase/             client.ts, server.ts, env.ts
+lib/adminAuth.ts          server-only Auth-user CRUD over the Management API (reads SUPABASE_ACCESS_TOKEN)
+lib/permissions.ts        permission catalog; stored in app_metadata.permissions, unenforced (see §5)
 services/inventoryService.ts   all data access, browser Supabase client
+services/adminUsersService.ts  Admin Console fetch layer over /api/admin/users
 supabase/schema.sql       tables + RLS: anon read/write, policies generated in one DO block
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
@@ -50,16 +54,18 @@ utils/format.ts, utils/errors.ts  live helpers
 scripts/                  check-supabase-env.mjs, check-rls.mjs
 ```
 
-What used to be here and is **not**: `app/(auth)/`, `app/auth/`, `app/actions/`, `app/(app)/admin/`,
-`lib/auth.ts`, `lib/roles.ts`, `lib/supabase/dal.ts`, `lib/supabase/proxy.ts`,
-`components/Permissions.tsx`, `components/UserMenu.tsx`, `components/SubmitButton.tsx`,
-`proxy.ts` (the root middleware), `utils/supabase/`, `scripts/check-auth.mjs`. All deleted in the
-auth removal. Earlier notes also described `components/ui/`, `components/layout/`,
-`hooks/useDebounce.ts` and `lib/mockData.ts` — those were never built.
+What used to be here and is **not**: `app/(auth)/`, `app/auth/`, `app/actions/`, `lib/auth.ts`,
+`lib/roles.ts`, `lib/supabase/dal.ts`, `lib/supabase/proxy.ts`, `components/UserMenu.tsx`,
+`components/SubmitButton.tsx`, `proxy.ts` (the root middleware), `utils/supabase/`,
+`scripts/check-auth.mjs`. All deleted in the auth removal. The new Admin Console
+(`app/(app)/admin/users/`, added 2026-10-07) is a different admin: it manages creating, editing,
+banning and deleting *Auth users* and ticks `components/PermissionPicker.tsx` in place of the old
+role-ladder `components/Permissions.tsx`. Earlier notes also described `components/ui/`,
+`components/layout/`, `hooks/useDebounce.ts` and `lib/mockData.ts` — those were never built.
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/transactions`, `/requests`, `/audits`, `/categories`,
-`/warehouses`, `/suppliers`, `/departments`. All ten are prerendered as static shells; the data
-arrives on the client.
+`/warehouses`, `/suppliers`, `/departments` (prerendered static shells; data arrives on the client),
+plus the Admin Console `/admin/users`.
 
 ---
 
@@ -69,6 +75,11 @@ arrives on the client.
 one credential: the publishable key, which `lib/supabase/{client,server}.ts` reads and sends to the
 browser. PostgREST presents that key as the `anon` role, so every request this app makes is an `anon`
 request. There is nothing in a JWT to branch on, because there is no session.
+
+The one exception is the Admin Console (`/admin/users`): its route handlers hold the Management-API
+PAT (`SUPABASE_ACCESS_TOKEN`) and run SQL against `auth.users` on the server
+(`lib/adminAuth.ts`). That is a server-side credential, not a session — there is still no login page
+and nothing identifies the visitor, so anyone who reaches the app can use the console (§5 item 4).
 
 Consequences:
 
@@ -136,27 +147,37 @@ All reads and writes go through the **browser** Supabase client.
    boundary (§3). Make turning it off a deliberate decision, and note it currently also blocks
    ordinary staff, who need a Vercel account to see anything. See §8.
 3. **Rotate credentials that were pasted into chat:** the account-scoped `sbp_…` personal access
-   token, the database password, and an `sb_secret_…` key. The scoped Database Read-write PAT made
-   2026-10-07 (`.env.local`, `SUPABASE_ACCESS_TOKEN`) was pasted into chat too — rotate it once no
-   further SQL run needs it. Create scoped PATs instead — a classic PAT grants full account access.
-   Prefer handing a token over by writing it to a gitignored file over pasting it into the
-   conversation, which is how the last one leaked. Independent of the auth change.
-4. **Delete the stray account `probe@users.invalid`, id
-   `43623ca5-781f-4671-8c46-53e7e84502c3`** — inert, and now doubly irrelevant since nothing reads
-   an account, but it should still go. Dashboard → Authentication, or the `auth.identities` /
-   `auth.users` deletes below. Do not probe write endpoints on the live project without asking first.
-5. **`/api/supabase-test` is unauthenticated and over-detailed.** It returns `categoriesSample` and
+   token, the database password, and an `sb_secret_…` key. The scoped Database Read-write PAT
+   (`.env.local`, `SUPABASE_ACCESS_TOKEN`) was pasted into chat too — and it is now load-bearing at
+   *runtime* for the Admin Console, not just for SQL runs, so rotate it in a window where the
+   console's 502 message is acceptable, or create a fresh one first. Create scoped PATs instead — a
+   classic PAT grants full account access. Prefer handing a token over by writing it to a gitignored
+   file over pasting it into the conversation, which is how the last one leaked.
+4. **The Admin Console is unauthenticated — currently the widest hole in the system.** `/admin/users`
+   and `/api/admin/users*` have no identity check of any kind: anyone who reaches the app (past the
+   single Vercel gate, §2/§8) can create accounts, reset passwords, and ban or delete users, because
+   the route handlers run as the Management-API PAT and there is nothing to compare the request
+   against. The deleted role ladder at least gated controls; this console everything. Fix, in order:
+   (a) gate `/api/admin/users*` behind a shared-secret header or HTTP basic auth so the route is
+   inert to anonymous callers; (b) then build real sign-in so `admin.view` / `admin.manage` in
+   `lib/permissions.ts` mean something. The permissions are stored in `app_metadata.permissions` and
+   currently **enforced nowhere** — the Users screen itself says so.
+5. **The stray probe account `probe@users.invalid` (id `43623ca5-…`) is gone** — `listAuthUsers`
+   no longer shows it (verified 2026-10-07). The three remaining accounts are the test accounts
+   `admin@users.invalid` and `app@users.invalid` plus the real `thimsin79@gmail.com`. Clean up the
+   two `.invalid` test accounts once the console is gated (§5 item 4).
+6. **`/api/supabase-test` is unauthenticated and over-detailed.** It returns `categoriesSample` and
    `totalItemsInDb` to any caller, and is `ƒ (Dynamic)` while every real screen is static. It is no
    longer singled out in a public-path list — there are no public paths — so it sits behind the same
    single Vercel gate as everything else. Still worth shrinking or deleting: nothing calls it.
-6. `recordTransaction` in `inventoryService.ts` inserts the transaction and updates the item in two
+7. `recordTransaction` in `inventoryService.ts` inserts the transaction and updates the item in two
    round-trips; wrap both in a Postgres RPC if atomicity matters.
-7. Reference screens (categories, warehouses, suppliers, departments) are read-only. Only inventory,
+8. Reference screens (categories, warehouses, suppliers, departments) are read-only. Only inventory,
    purchases, requests and audits have write paths.
-8. With no sessions, `lib/supabase/server.ts` exists only for `api/supabase-test`. If that route goes
+9. With no sessions, `lib/supabase/server.ts` exists only for `api/supabase-test`. If that route goes
    away, it and `createServerClient` go with it.
 
-Deleting the stray probe account from §5 item 4:
+The stale deletion snippet for the old probe account (in case any live row is ever re-seeded):
 
 ```sql
 DELETE FROM auth.identities WHERE user_id = '43623ca5-781f-4671-8c46-53e7e84502c3';
@@ -243,6 +264,11 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
 - **Tooling on this machine:** `gh` is installed but **not** authenticated (`gh auth login` needed, so
   check runs cannot be read). The `vercel` CLI is installed but the project is **not** linked (no
   `.vercel/project.json`, which `.gitignore` covers) and there is no `VERCEL_TOKEN`.
+- **Runtime env the Admin Console needs:** `SUPABASE_ACCESS_TOKEN` must be set in Vercel Project
+  Settings → Environment Variables, or `/api/admin/users*` returns 502 with an actionable message
+  that the Users screen shows. It is read only on the server by `lib/adminAuth.ts` and never ships to
+  the browser. `.env.local` carries a working Database Read-write PAT for local development; Vercel
+  needs its own copy with the same scope.
 - **Verifying a deploy with no credentials — and its limit.** Pick a string that exists in exactly
   one commit, confirm it is absent from the parent (`git show <old-sha>:<file> | Select-String
   <string>`), then grep the production HTML for it. Signature blocks in the HTML are useless for this
@@ -271,8 +297,10 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
 - Read the matching guide in `node_modules/next/dist/docs/` before using any Next.js API — this
   version has breaking changes (see `AGENTS.md`).
 - `.env*` is gitignored. Keep `.env.example` in sync with the variables the code actually reads:
-  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-  There is **no** `SUPABASE_SERVICE_ROLE_KEY` any more — nothing in the repo reads it.
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  and the server-only `SUPABASE_ACCESS_TOKEN` (read by `lib/adminAuth.ts` for `/api/admin/users`).
+  Never put a `NEXT_PUBLIC_` prefix on the token. There is **no** `SUPABASE_SERVICE_ROLE_KEY` any
+  more — nothing in the repo reads it.
 - **Running SQL from this machine:** no `psql`, no Supabase CLI, and no usable network path to the
   database — `db.<ref>.supabase.co` has no A record (IPv6-only) and this machine has no IPv6 route,
   and the pooler hostname is NXDOMAIN. The only route is the Management API
