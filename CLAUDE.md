@@ -296,8 +296,11 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
     without Vercel accounts, that requires building an auth layer again — it cannot be solved by
     config alone, because RLS has no identity to check.
 - **Tooling on this machine:** `gh` is installed but **not** authenticated (`gh auth login` needed, so
-  check runs cannot be read). The `vercel` CLI is installed but the project is **not** linked (no
-  `.vercel/project.json`, which `.gitignore` covers) and there is no `VERCEL_TOKEN`.
+  check runs cannot be read). The `vercel` CLI **is** authenticated (device login as
+  `thimsin79-8849`, 2026-10-08) and the project **is** linked — `.vercel/project.json` exists and
+  `.gitignore` covers it. That makes `vercel env ls/add/rm`, `vercel redeploy <url>`, `vercel logs`,
+  `vercel ls` and `vercel curl` all usable without a dashboard. There is still no `VERCEL_TOKEN`, so
+  anything outside the CLI needs a browser session.
 - **Runtime env the Admin Console needs:** `SUPABASE_ACCESS_TOKEN` must be set in Vercel Project
   Settings → Environment Variables, or `/api/admin/users*` returns 502 with an actionable message
   that the Users screen shows. It is read only on the server by `lib/adminAuth.ts` and never ships to
@@ -321,6 +324,13 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
   success, live rollout — needs a Vercel session in a browser, `gh auth login`, or a
   `VERCEL_TOKEN`. Decide for a given deploy which one you are relying on rather than assuming the
   push implies the deploy.
+
+  **With the authenticated CLI, none of that blindness applies** — `vercel curl <url>` fetches the
+  real body through Deployment Protection (curl flags go after `--`, e.g.
+  `vercel curl <url> -- --header "x-admin-secret: …"`; `-o`/`-w`/`-H` before the separator are *not*
+  intercepted and fall through to a plain curl, which the 302 then blanks). That is how the gate and
+  the Admin Console were verified in production on 2026-10-08, and `vercel ls` (newest deployment
+  `● Ready`) plus `vercel logs <url>` cover the build side. See §7 for the exact probes.
 
 ---
 
