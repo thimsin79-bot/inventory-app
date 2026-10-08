@@ -194,6 +194,12 @@ All reads and writes go through the **browser** Supabase client.
     reading a Secret-typed variable back is impossible, so confirm the bytes by adding it as
     `--no-sensitive`, `vercel env pull`, then re-adding it as a Secret.
 
+    **The error is still reachable on purpose:** every deployment-specific URL
+    (`inventory-<id>-thimsin.vercel.app`) serves a frozen build with the env it had, so the
+    pre-fix ones answer with this ByteString message and the pre-env ones with
+    `SUPABASE_ACCESS_TOKEN is not set`. `vercel ls` lists them. It is not a regression — only the
+    production domain, `https://inventory-app-thimsin.vercel.app`, serves the current build.
+
 The stale deletion snippet for the old probe account (in case any live row is ever re-seeded):
 
 ```sql
