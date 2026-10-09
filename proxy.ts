@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { sessionFromRequest, withSessionCookies } from '@/lib/supabase/session'
 
 const SIGN_IN_PATH = '/sign-in'
+const SIGN_UP_PATH = '/sign-up'
 
 /**
  * The sign-in gate. Pages need a session; API routes get a 403 body instead
@@ -28,12 +29,13 @@ export async function proxy(request: NextRequest) {
   }
 
   const onSignInPage = pathname === SIGN_IN_PATH || pathname === `${SIGN_IN_PATH}/`
+  const onSignUpPage = pathname === SIGN_UP_PATH || pathname === `${SIGN_UP_PATH}/`
 
-  if (!session.user && !onSignInPage) {
+  if (!session.user && !onSignInPage && !onSignUpPage) {
     return withSessionCookies(NextResponse.redirect(new URL(SIGN_IN_PATH, request.url)), session)
   }
 
-  if (session.user && onSignInPage) {
+  if (session.user && (onSignInPage || onSignUpPage)) {
     return withSessionCookies(NextResponse.redirect(new URL('/', request.url)), session)
   }
 
