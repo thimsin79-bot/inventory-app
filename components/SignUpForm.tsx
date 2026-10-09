@@ -2,13 +2,13 @@
 
 import { useState, type FormEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+
 import { Button, Card, Input, Label } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { errorMessage } from '@/utils/errors'
 
 export function SignUpForm() {
-  const router = useRouter()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
