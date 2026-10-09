@@ -7,29 +7,30 @@ import { Button, Card, Input, Label } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { errorMessage } from '@/utils/errors'
 
-export function SignInForm() {
+export function SignUpForm() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [info, setInfo] = useState<string | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPending(true)
     setError(null)
+    setInfo(null)
 
     try {
-      const { error: signInError } = await createClient().auth.signInWithPassword({
+      const { error: signUpError } = await createClient().auth.signUp({
         email: email.trim(),
         password,
       })
-      if (signInError) {
-        setError(errorMessage(signInError))
+      if (signUpError) {
+        setError(errorMessage(signUpError))
         return
       }
-      router.replace('/')
-      router.refresh()
+      setInfo('Check your email to confirm your account before signing in.')
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -45,14 +46,14 @@ export function SignInForm() {
             Inventory Management
           </h1>
           <p className='mt-1 text-sm text-zinc-500 dark:text-zinc-400'>
-            Sign in with your account to continue.
+            Create a new account to get started.
           </p>
         </div>
 
         <div>
-          <Label htmlFor='sign-in-email'>Email</Label>
+          <Label htmlFor='sign-up-email'>Email</Label>
           <Input
-            id='sign-in-email'
+            id='sign-up-email'
             type='email'
             autoComplete='email'
             required
@@ -64,15 +65,15 @@ export function SignInForm() {
         </div>
 
         <div>
-          <Label htmlFor='sign-in-password'>Password</Label>
+          <Label htmlFor='sign-up-password'>Password</Label>
           <Input
-            id='sign-in-password'
+            id='sign-up-password'
             type='password'
-            autoComplete='current-password'
+            autoComplete='new-password'
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder='Your password'
+            placeholder='Create a password'
           />
         </div>
 
@@ -84,15 +85,23 @@ export function SignInForm() {
             {error}
           </p>
         )}
+        {info && (
+          <p
+            role='status'
+            className='rounded-md bg-green-50 px-3 py-2 text-sm text-green-800 dark:bg-green-950/50 dark:text-green-300'
+          >
+            {info}
+          </p>
+        )}
 
         <Button type='submit' variant='primary' className='w-full' disabled={pending}>
-          {pending ? 'Signing in…' : 'Sign in'}
+          {pending ? 'Creating account…' : 'Create account'}
         </Button>
 
         <p className='text-center text-sm text-zinc-500 dark:text-zinc-400'>
-          Don't have an account?{' '}
-          <Link href='/sign-up' className='font-medium text-zinc-900 hover:underline dark:text-zinc-100'>
-            Create one
+          Already have an account?{' '}
+          <Link href='/sign-in' className='font-medium text-zinc-900 hover:underline dark:text-zinc-100'>
+            Sign in
           </Link>
         </p>
       </form>
