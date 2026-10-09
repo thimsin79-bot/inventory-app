@@ -2,9 +2,10 @@
  * Checks the Admin Console gate in lib/adminGate.ts and the two route files
  * that call it.
  *
- * There is no authentication in this app, so this gate is the only thing
- * standing between any visitor and the Management-API PAT behind
- * /api/admin/users. It is therefore the one guard whose failure is silent:
+ * There is an authentication layer (since 2026-10-09) and both Admin Console routes
+ * call `permissionCheck` after this gate — see check-auth.mjs — but the shared secret
+ * is still the first thing standing between any visitor and the Management-API PAT
+ * behind /api/admin/users. It is therefore the one guard whose failure is silent:
  * a route that forgets to call it answers 200 with a full user list, and
  * nothing in the UI looks different. The assertions below cover both halves
  * of that — the decision function itself (fail closed, timing-safe, trims)

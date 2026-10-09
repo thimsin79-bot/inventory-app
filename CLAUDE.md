@@ -2,16 +2,17 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 8, 2026
+**Last Updated:** October 9, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
-the Vercel Git integration. Verified without Vercel API access by grepping production HTML for a
-string unique to one commit. See §8.
+the Vercel Git integration.
 
-> **There is no authentication in this app.** This is a deliberate change made 2026-10-06: the
-> login and signup pages, the session proxy, the four-tier role ladder, `/admin/users` and the
-> `lib/roles.ts` capability matrix were all deleted. §3 and §8 explain what replaced them.
+> **This app has an authentication layer again.** Built 2026-10-09 on top of the auth removal of
+> 2026-10-06: `/sign-in`, a `proxy.ts` session gate, per-user permissions from
+> `app_metadata.permissions` enforced in the UI and on the Admin Console routes, and RLS flipped to
+> `authenticated`-only. §3 and §8 describe the exact boundary; this file is the source of truth for
+> it, because the security model lives in the app, not in SQL alone.
 
 ---
 
@@ -21,15 +22,17 @@ string unique to one commit. See §8.
 - **Supabase** `@supabase/ssr` + `@supabase/supabase-js` (the latter only for the `SupabaseClient` type)
 - Node v24.21.0, npm 11, path alias `@/*`
 - Supabase project `bktxzesvtmgcmznsfnlu` (`ap-southeast-2`).
-  **`supabase/schema.sql` and `supabase/seed.sql` were run in full on 2026-10-07** through the
-  Management API (§9). Live policies are the repo's `TO anon USING (true)`, grants match the file,
-  and the seeded row counts in §4 are back. Verified the same day through PostgREST with the
-  publishable key: anon reads all nine tables.
-- **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
-  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate`,
-  22 / 49 / 22 assertions. `check:env` imports `lib/supabase/env.ts` directly via Node's type
-  stripping, `check:gate` imports `lib/adminGate.ts` the same way. Then `npm run lint`,
-  `npx tsc --noEmit`, `npm run build`.
+  **`supabase/schema.sql` was last run in full on 2026-10-09** through the Management API (§9) when
+  the RLS split was flipped from `anon` to `authenticated`. Verified live the same day: 36 policies,
+  every one `TO authenticated`; `anon` has zero table privileges and PostgREST refuses it with 401;
+  `authenticated` has the grants the file declares (DELETE withheld on purchases, transactions,
+  requests and audits). Data was not touched. The pre-auth `anon` world is described under §8.
+- **No test framework, and deliberately none.** Four dependency-free Node scripts hold the logic a
+  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate` +
+  `check:auth` (22 / 50 / 22 / 47 assertions). `check:env` imports `lib/supabase/env.ts` directly via
+  Node's type stripping, `check:rls` reads `supabase/schema.sql`, `check:gate` imports
+  `lib/adminGate.ts`, `check:auth` imports `lib/permissions.ts` + `lib/permissionGate.ts` and reads
+  every gated screen as source. Then `npm run lint`, `npx tsc --noEmit`, `npm run build`.
 
 ---
 
@@ -38,79 +41,97 @@ string unique to one commit. See §8.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, suppressHydrationWarning
+  sign-in/                sign-in page (server page + client SignInForm); the entry to the app
   (app)/                  the 10 app screens + shared sidebar shell; (app)/admin/users is the Admin Console
-  api/supabase-test/      connection diagnostic (unauthenticated, see §5)
-  api/admin/users/        Admin Console handlers: read/write Supabase Auth users via the Management API
-components/               flat: ui.tsx, Nav, DataTable, Modal, forms, ConnectionStatus, PermissionPicker
+  api/supabase-test/      connection diagnostic (no session -> 403 via proxy)
+  api/admin/users/        Admin Console handlers: adminSecretGate, then admin.view/admin.manage, then lib/adminAuth
+components/               flat: ui.tsx, Nav, DataTable, Modal, forms, ConnectionStatus, PermissionPicker,
+                          AuthProvider, ScreenGate, SignInForm, UserMenu
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
-lib/supabase/             client.ts, server.ts, env.ts
+lib/supabase/             client.ts, server.ts, session.ts (proxy session read), env.ts
+lib/permissions.ts        permission catalog + sessionFromAuth; stored in app_metadata.permissions
+lib/permissionGate.ts     the 403 decision, fail closed
+lib/auth.ts               server side of permissionCheck (getClaims -> sessionFromAuth)
 lib/adminAuth.ts          server-only Auth-user CRUD over the Management API (reads SUPABASE_ACCESS_TOKEN)
-lib/adminGate.ts          the Admin Console gate: x-admin-secret vs ADMIN_CONSOLE_SECRET, fail closed
-lib/permissions.ts        permission catalog; stored in app_metadata.permissions, unenforced (see §5)
+lib/adminGate.ts          the Admin Console shared-secret gate: x-admin-secret vs ADMIN_CONSOLE_SECRET, 401/503
+proxy.ts (root)           the sign-in gate (Next 16 proxy/middleware, Node runtime)
 services/inventoryService.ts   all data access, browser Supabase client
 services/adminUsersService.ts  Admin Console fetch layer over /api/admin/users (holds the secret per tab)
-supabase/schema.sql       tables + RLS: anon read/write, policies generated in one DO block
+supabase/schema.sql       tables + RLS: authenticated-only policies, generated in one DO block
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
 utils/format.ts, utils/errors.ts  live helpers
-scripts/                  check-supabase-env.mjs, check-rls.mjs, check-admin-gate.mjs
+scripts/                  check-supabase-env.mjs, check-rls.mjs, check-admin-gate.mjs, check-auth.mjs
 ```
 
-What used to be here and is **not**: `app/(auth)/`, `app/auth/`, `app/actions/`, `lib/auth.ts`,
-`lib/roles.ts`, `lib/supabase/dal.ts`, `lib/supabase/proxy.ts`, `components/UserMenu.tsx`,
-`components/SubmitButton.tsx`, `proxy.ts` (the root middleware), `utils/supabase/`,
-`scripts/check-auth.mjs`. All deleted in the auth removal. The new Admin Console
-(`app/(app)/admin/users/`, added 2026-10-07) is a different admin: it manages creating, editing,
-banning and deleting *Auth users* and ticks `components/PermissionPicker.tsx` in place of the old
-role-ladder `components/Permissions.tsx`. Earlier notes also described `components/ui/`,
-`components/layout/`, `hooks/useDebounce.ts` and `lib/mockData.ts` — those were never built.
+What used to be here and is **not**: `app/(auth)/`, `app/auth/`, `app/actions/`,
+`lib/roles.ts`, `lib/supabase/dal.ts`, `lib/supabase/proxy.ts`, `components/SubmitButton.tsx`,
+`utils/supabase/`. All deleted in the 2026-10-06 auth removal. The 2026-10-09 layer is a fresh,
+smaller build: new `lib/auth.ts`, `lib/permissionGate.ts`, `lib/supabase/session.ts`,
+`components/{AuthProvider,ScreenGate,SignInForm,UserMenu}.tsx`, `app/sign-in/`, and a root
+`proxy.ts`. The Admin Console (`app/(app)/admin/users/`, added 2026-10-07) manages creating, editing,
+banning and deleting *Auth users* and ticks `components/PermissionPicker.tsx`.
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/transactions`, `/requests`, `/audits`, `/categories`,
 `/warehouses`, `/suppliers`, `/departments` (prerendered static shells; data arrives on the client),
-plus the Admin Console `/admin/users`.
+the Admin Console `/admin/users`, and `/sign-in` (outside the app shell).
 
 ---
 
-## 3. Access control — read this before touching RLS
+## 3. Access control — read this before touching RLS or the proxy
 
-**There is no authentication, no session, no role, and no server-side user.** On the data path the
-app holds exactly one credential: the publishable key, which `lib/supabase/{client,server}.ts` reads
-and sends to the browser. PostgREST presents that key as the `anon` role, so every request this app
-makes is an `anon` request. There is nothing in a JWT to branch on, because there is no session.
+The boundary is a chain of three gates, each only as strong as the next:
 
-The one exception is the Admin Console (`/admin/users`): its route handlers hold the Management-API
-PAT (`SUPABASE_ACCESS_TOKEN`) and run SQL against `auth.users` on the server
-(`lib/adminAuth.ts`). That is a server-side credential, not a session — there is still no login page
-and nothing identifies the visitor. Since 2026-10-08 every handler calls `adminSecretGate`
-(`lib/adminGate.ts`) first, so a caller must present `x-admin-secret` matching the server-only
-`ADMIN_CONSOLE_SECRET` or get 401 (503 when the variable is unset — it fails closed). That is one
-shared password for everybody, not identity: anyone who knows it is an admin (§5 item 4).
+1. **`proxy.ts` (root, Next 16 proxy, Node runtime)** — every request that is not `_next`/static
+   goes through it. Pages without a valid session get `302 -> /sign-in`; a signed-in visit to
+   `/sign-in` gets `302 -> /`; `/api/*` without a session gets a `403 {error:"Sign-in required."}`
+   JSON body instead of a redirect so fetch failures stay readable in the UI. The decision uses
+   `getClaims()` — the access token is verified against the project's JWKS (refreshing near
+   expiry), not trusted from the cookie — and `withSessionCookies` copies any refreshed cookies onto
+   the redirect. This is the *entry* gate. **It is not the security boundary.**
+2. **RLS in `supabase/schema.sql`** — every policy is `TO authenticated USING (true)` /
+   `WITH CHECK (true)`, one per table per command (nine tables × four commands, generated in one
+   `DO` block), and `authenticated` is granted those commands while `anon` is revoked from all nine
+   tables and granted nothing. So a request with *any* signed-in session reaches every row; a
+   session-less request touches nothing (verified live 2026-10-09: `anon` → 401 on PostgREST).
+3. **App-layer permissions** — the finer-grained model lives in the session JWT. Each user's
+   `app_metadata.permissions` array (edited in the Admin Console) is what the UI and the Admin
+   routes branch on:
+   - `components/ScreenGate.tsx` blocks each screen's content behind its `<screen>.view`
+     permission (spinner while loading, refusal naming the key otherwise).
+   - `components/Nav.tsx` only renders links the user may open; `components/UserMenu.tsx` shows the
+     sign-in identity and Sign out.
+   - Write screens gate their create/edit/delete actions behind `manage`: buttons and the actions
+     column render only when the user holds `<screen>.view` **and** `<screen>.manage`.
+   - Admin Console routes: `adminSecretGate` (shared secret, 401/503) runs *first*, then
+     `permissionCheck('admin.view')` on GET and `permissionCheck('admin.manage')` on
+     POST/PATCH/DELETE, then any `lib/adminAuth` call.
 
-Consequences:
+Consequences, stated honestly:
 
-- **`supabase/schema.sql` grants `anon` full read and write on all nine tables.** Policies are
-  generated in one `DO` block as `TO anon USING (true)` / `WITH CHECK (true)`, so nine tables times
-  four commands is thirty-six statements, written once.
-- **Those policies are not a security boundary.** They exist so the app functions. Anyone who reaches
-  the Supabase project directly — not via the app — can read and write everything with the publishable
-  key, because that key is public by design. The policies cannot stop that.
-- **The only gate is Vercel Deployment Protection** (Project Settings → Deployment Protection), which
-  302s anonymous traffic to Vercel SSO. It is currently **on**. Turning it off makes the entire
-  inventory, purchases and audits world-writable at this URL. See §8.
-- `TO anon` rather than the default `TO public`, so the grant states who it is for, and so it fails
-  closed: an `authenticated` request (an account that still exists from before the removal) matches
-  nothing and is explicitly revoked, so a leftover account is not a way in.
-- **The one limit that survived:** `DELETE` is withheld at the *grant* on `purchases`, `transactions`,
-  `requests` and `audits`, because no screen deletes them and `services/inventoryService.ts` exports
-  no delete for them. `items`, `categories`, `suppliers`, `warehouses` and `departments` keep `DELETE`.
-  This is a real constraint, and it is what `check:rls` guards hardest.
-- There is no per-user identity any more. `transactions.created_by`, `requests.requested_by` and
-  similar columns are free text the UI types in — nothing validates or attributes them. An audit trail
-  in this schema is a claim, not evidence.
-
-**Layering:** there is no redirect layer (no `proxy.ts`) and no server-side session read. The data
-boundary is the grant plus the policy; the UI shows every control to every visitor because there is
-nobody to hide them from.
+- RLS still does **not** branch on permissions — only on signed-in vs not. A raw client with any
+  valid session (fetching PostgREST directly, bypassing the app) can read and write every row,
+  because the manage/view matrix lives in the app and the JWT, not in SQL. That is a deliberate,
+  documented boundary: moving the nine-permission matrix into RLS would duplicate the app logic on
+  tables the screens share. If this must change, re-read this section before writing RLS.
+- `getClaims()`/`getSessionUser()` give the server a verified identity. `user_metadata` is never
+  read anywhere — the user can edit it; only `app_metadata` (written by the Admin Console) decides.
+- Permission changes take effect on the user's **next token refresh or next sign-in**, because
+  `app_metadata` sits in the access token and is verified against the JWKS. Roughly an hour of
+  slack for a signed-in user.
+- `permissionGate` returns **403** for both no-session and missing-permission. **401 is reserved
+  for the Admin Console shared secret** (`lib/adminGate.ts`): `services/adminUsersService.ts`
+  maps any 401 to "unlock the console with the secret", so a sign-in problem must not look like a
+  secret problem.
+- **The one DB-level limit beyond the split:** `DELETE` is withheld at the *grant* on `purchases`,
+  `transactions`, `requests` and `audits`, because no screen deletes them. `items`, `categories`,
+  `suppliers`, `warehouses` and `departments` keep `DELETE`. `check:rls` guards this hardest.
+- There is still no per-user attribution: `transactions.created_by`, `requests.requested_by` etc.
+  are free text the UI types in. `transactions.manage` has no UI enforcement — stock writes arrive
+  through the inventory screen's `inventory.manage`.
+- Permission catalog: `<screen>.view` for all eleven screens; `manage` for inventory, purchases,
+  transactions, requests, audits, admin. The reference screens (categories, warehouses, suppliers,
+  departments) are read-only and have no manage key (see `lib/permissions.ts`).
 
 ---
 
@@ -118,94 +139,61 @@ nobody to hide them from.
 
 Eight of the nine tables use `TEXT` primary keys with no default, so ids are generated in
 `services/inventoryService.ts:17` (`nextId(prefix, length)` → `TXN000123`, `PO-20260001`, `AUD00042`,
-`REQ00017`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, because it
-arrived in a later change. Earlier notes here claimed all nine were `TEXT`; only eight are.
+`REQ00017`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
 
-Row counts, re-measured 2026-10-07 after `supabase/seed.sql` was run against the live project:
-items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6, transactions 7,
-requests 7, audits 5. The 2026-10-06 measurement (items 2, everything else 0) described the
-emptied project before the seed; the file is idempotent and puts the reference data back.
+Seeded row counts (from `supabase/seed.sql`, verified 2026-10-07, unaffected by the 2026-10-09 RLS
+flip): items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
+transactions 7, requests 7, audits 5.
 
-All reads and writes go through the **browser** Supabase client.
+All reads and writes go through the **browser** Supabase client
+(`services/inventoryService.ts`), which now only works once a session exists.
 
 ---
 
 ## 5. Open Issues — Do These Next
 
-1. **Closed 2026-10-07 — `supabase/schema.sql` has now been run since the auth removal, together
-   with `supabase/seed.sql`.** Two real bugs surfaced on the way there and are fixed in the file:
-   the `DO` block created `write on <table>` three times (policy names are unique per table, so the
-   second `CREATE POLICY` errored and rolled the whole script back), and grants are additive — the
-   live project still carried `DELETE`, `TRUNCATE`, `REFERENCES` and `TRIGGER` for `anon` on all
-   nine tables from an earlier scheme, which the `GRANT`s in the file could not remove. `schema.sql`
-   now drops every existing policy by lookup and runs `REVOKE ALL ... FROM anon` before granting, so
-   a re-run converges from any starting state.
-
-   Verified against the live project the same day: the publishable key reads all nine tables
-   through PostgREST (9 / 21 / 5 / 5 / 6 / 6 / 7 / 7 / 5 rows) including the seven new `items`
-   columns; `pg_policy` holds exactly 36 policies, every one `TO anon`; `role_table_grants` gives
-   `anon` exactly SELECT, INSERT, UPDATE, DELETE — DELETE withheld on purchases, transactions,
-   requests, audits — and `authenticated` nothing. That probe is the half `check:rls` cannot
-   cover: the script reads the file, not the database, so re-run it after any future SQL run.
-   How to reach the database from this machine: §9.
-2. **Vercel Deployment Protection is now load-bearing, not a preference.** It is the entire access
-   boundary (§3). Make turning it off a deliberate decision, and note it currently also blocks
-   ordinary staff, who need a Vercel account to see anything. See §8.
-3. **Rotate credentials that were pasted into chat:** the account-scoped `sbp_…` personal access
+1. **Closed 2026-10-09 — the RLS split is live.** All policies `TO authenticated`, grants match
+   the file, `anon` revoked everywhere. Verified on the live project the same day (`pg_policy`,
+   `aclexplode`/`has_table_privilege`, and a PostgREST `anon` probe → 401). That half of the
+   boundary is now real — see §3 and §7.
+2. **Accounts: `auth.users` is empty (2026-10-09).** The three named accounts —
+   `admin@users.invalid`, `app@users.invalid`, `thimsin79@gmail.com` — do not exist in this project;
+   the user is creating/confirming them in the dashboard (decision 2026-10-09: do not create accounts
+   from this machine). Until one exists, nothing can sign in and every screen shows the spinner then
+   the gate. Once one exists, grant it permissions in the Admin Console (that needs
+   `ADMIN_CONSOLE_SECRET`) and confirm the sign-in flow. A realistic checklist for a new account:
+   Create user → sign in on `/sign-in` → `app_metadata.permissions` ticks survive a token refresh.
+3. **Deployment Protection is now belt-and-braces, not load-bearing.** With sign-in, verified
+   sessions, RLS `authenticated`-only and app permissions, the data no longer depends on Vercel SSO
+   (§8). Keep it on for the given accounts; ordinary staff reach the app through `/sign-in` instead
+   of a Vercel account. Re-read §8 for the current state.
+4. **Rotate credentials that were pasted into chat:** the account-scoped `sbp_…` personal access
    token, the database password, and an `sb_secret_…` key. The scoped Database Read-write PAT
-   (`.env.local`, `SUPABASE_ACCESS_TOKEN`) was pasted into chat too — and it is now load-bearing at
-   *runtime* for the Admin Console, not just for SQL runs, so rotate it in a window where the
-   console's 502 message is acceptable, or create a fresh one first. Create scoped PATs instead — a
-   classic PAT grants full account access. Prefer handing a token over by writing it to a gitignored
-   file over pasting it into the conversation, which is how the last one leaked.
-4. **The Admin Console — (a) done 2026-10-08, (b) still open.** (a) Every handler in
-   `app/api/admin/users/*` now calls `adminSecretGate` before it touches the Management-API PAT, so
-   an anonymous caller gets `401 Admin console secret required.` instead of a user list, and a
-   deployment without `ADMIN_CONSOLE_SECRET` gets `503` rather than an open door. The secret is
-   server-only (no `NEXT_PUBLIC_` prefix — that would ship it in the JS bundle and gate nothing);
-   the Users screen prompts for it once per tab and keeps it in `sessionStorage`. `npm run
-   check:gate` guards the wiring as well as the decision function, and was proved to fail by
-   deleting a gate call. (b) is still the real fix: the secret is one value shared by everyone who
-   uses the console, it identifies nobody, and `admin.view` / `admin.manage` in `lib/permissions.ts`
-   remain **enforced nowhere** — the stored `app_metadata.permissions` mean nothing until sign-in
-   exists, and the Users screen still says so.
-5. **The stray probe account `probe@users.invalid` (id `43623ca5-…`) is gone** — `listAuthUsers`
-   no longer shows it (verified 2026-10-07). The three remaining accounts are the test accounts
-   `admin@users.invalid` and `app@users.invalid` plus the real `thimsin79@gmail.com`. Clean up the
-   two `.invalid` test accounts once the console is gated (§5 item 4).
-6. **`/api/supabase-test` is unauthenticated and over-detailed.** It returns `categoriesSample` and
-   `totalItemsInDb` to any caller, and is `ƒ (Dynamic)` while every real screen is static. It is no
-   longer singled out in a public-path list — there are no public paths — so it sits behind the same
-   single Vercel gate as everything else. Still worth shrinking or deleting: nothing calls it.
+   (`.env.local`, `SUPABASE_ACCESS_TOKEN`) is load-bearing at *runtime* for the Admin Console and
+   for SQL runs (§9), so rotate it in a window where the console's 502 message is acceptable, or
+   create a fresh one first. Prefer handing a token over by writing it to a gitignored file rather
+   than pasting it into a conversation.
+5. **The Admin Console — (a) done, (b) done 2026-10-09.** (a) Every handler in
+   `app/api/admin/users/*` calls `adminSecretGate` before the Management-API PAT (anonymous caller →
+   `401 Admin console secret required.`; unset env → `503`). (b) Those handlers now also run
+   `permissionCheck` — `admin.view` on GET, `admin.manage` on POST/PATCH/DELETE — and the screen is
+   gated behind `admin.view` with write actions behind `admin.manage`, so the stored
+   `app_metadata.permissions` now mean something. The shared secret still identifies nobody (it is
+   one value for the whole team); that is accepted, and the Users screen copy says so.
+6. **`/api/supabase-test` sits behind the proxy now.** It answers `403 {error:"Sign-in required."}`
+   to anyone without a session, so it no longer leaks row counts to anonymous traffic. It is still a
+   diagnostic with no caller — worth shrinking or deleting.
 7. `recordTransaction` in `inventoryService.ts` inserts the transaction and updates the item in two
    round-trips; wrap both in a Postgres RPC if atomicity matters.
 8. Reference screens (categories, warehouses, suppliers, departments) are read-only. Only inventory,
    purchases, requests and audits have write paths.
-9. With no sessions, `lib/supabase/server.ts` exists only for `api/supabase-test`. If that route goes
-   away, it and `createServerClient` go with it.
-10. **Closed 2026-10-08 — the Admin Console's production 502.** `/api/admin/users` answered
-    `{"error":"Cannot convert argument to a ByteString because the character at index 7 …65279…"}`
-    in production while working locally. Index 7 of `Bearer <token>` is the first character of the
-    token, and 65279 is U+FEFF: the `SUPABASE_ACCESS_TOKEN` stored in Vercel began with a BOM, which
-    `fetch` refuses to put in a header. Fixed by rewriting the variable from the clean value in
-    `.env.local` (`vercel env rm` then `vercel env add … < file`, with the file written by Node) and
-    by `runSql` now trimming the token, so a pasted BOM cannot break it again. Two lessons: an env
-    change only reaches the site on a **new deployment** (`vercel redeploy <url>`, ~40s), and
-    reading a Secret-typed variable back is impossible, so confirm the bytes by adding it as
-    `--no-sensitive`, `vercel env pull`, then re-adding it as a Secret.
-
-    **The error is still reachable on purpose:** every deployment-specific URL
-    (`inventory-<id>-thimsin.vercel.app`) serves a frozen build with the env it had, so the
-    pre-fix ones answer with this ByteString message and the pre-env ones with
-    `SUPABASE_ACCESS_TOKEN is not set`. `vercel ls` lists them. It is not a regression — only the
-    production domain, `https://inventory-app-thimsin.vercel.app`, serves the current build.
-
-The stale deletion snippet for the old probe account (in case any live row is ever re-seeded):
-
-```sql
-DELETE FROM auth.identities WHERE user_id = '43623ca5-781f-4671-8c46-53e7e84502c3';
-DELETE FROM auth.users      WHERE id      = '43623ca5-781f-4671-8c46-53e7e84502c3';
-```
+9. `lib/supabase/server.ts` is now shared by `api/supabase-test` and `lib/auth.ts`. If the
+   diagnostic route goes away, keep it for `getSessionUser`.
+10. **Closed 2026-10-08 — the Admin Console's production 502** was a BOM-prefixed
+    `SUPABASE_ACCESS_TOKEN` in Vercel (U+FEFF at index 7 of `Bearer <token>`). Fixed by rewriting
+    the variable and by `runSql` trimming the token. An env change only reaches the site on a new
+    deployment (`vercel redeploy <url>`), and deployment-specific URLs serve their frozen build.
+    Only `https://inventory-app-thimsin.vercel.app` serves the current build.
 
 ---
 
@@ -217,155 +205,141 @@ DELETE FROM auth.users      WHERE id      = '43623ca5-781f-4671-8c46-53e7e84502c
   `StatusBadge`, `PageHeader`, `Spinner`, `EmptyState`, `ErrorState`) rather than adding new
   primitives.
 - Client screens follow the `useAsyncData` + `AsyncBoundary` + `DataTable` pattern with
-  `Column<T>[]`.
-- There are no `<form>` elements left — every screen action is a `Button` with an `onClick` handler
-  over local state, because there are no server actions to post to. If you reintroduce one, add a
-  pending state.
-- New screen → add its entry to `LINKS` in `components/Nav.tsx`.
+  `Column<T>[]`, wrapped in `ScreenGate` inside the screen's `Card`.
+- Gate a screen in one place: `const { can } = useAuth()` from `components/AuthProvider.tsx`.
+  There is exactly one Supabase client and one `onAuthStateChange` listener, in `AuthProvider` —
+  components consume the context, they do not open their own client.
+- New screen → add its entry to `LINKS` in `components/Nav.tsx` **with its `permission`**, add the
+  key to `lib/permissions.ts`, and gate the page with `ScreenGate permission="<screen>.view"`.
+- Manage keys: hide the PageHeader action buttons and the row-action column behind
+  `can('<screen>.manage')` along with the view gate.
+- Forms dispatch through the browser Supabase client (`signInWithPassword`, `signOut`) and keep a
+  pending state; `SignInForm` is the one `<form>` in the app.
 - `utils/errors.ts` (`errorCode`, `errorMessage`) normalizes Supabase/PostgREST errors for display.
+- Server routes: `adminSecretGate(request)` first, then `permissionCheck('<key>')`, then touch
+  credentials. Never read `user_metadata`.
 
 ---
 
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls + check:gate  (22 / 49 / 22 assertions)
+npm run check          # check:env + check:rls + check:gate + check:auth (22 / 50 / 22 / 47)
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-`check:rls` is the one that matters after touching `supabase/schema.sql`. It strips SQL comments
-first, then asserts: all nine tables declared and RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies
-generated for each, policies targeting `anon`, grants matching the policies, `DELETE` withheld on the
-four tables nothing deletes from, no `current_role`/`app_metadata`/role arrays left behind, and no
-`FOR ALL` catch-all. **It is expected to fail loudly if you reintroduce a role ladder** — and a guard
-that cannot fail is not a guard, so when you add an assertion, prove it first by breaking the code it
-covers and confirming a FAIL.
+After touching `supabase/schema.sql`, `check:rls` matters most: all nine tables declared and
+RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies targeting
+`authenticated` and never `anon`, grants matching the policies, `anon` revoked everywhere, `DELETE`
+withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role arrays, and
+no `FOR ALL` catch-all. **It must fail loudly if you reintroduce a role ladder or widen RLS to
+`anon`** — a guard that cannot fail is not a guard, so prove a new assertion by breaking the code it
+covers first.
 
-`check:gate` is the equivalent for `lib/adminGate.ts` and the two Admin Console routes: it runs the
-gate against a real `Request` (missing env → 503, wrong/absent header → 401, right header → null,
-padded value still matches) and separately asserts that **every** exported handler in
-`app/api/admin/users/*` calls it before any `lib/adminAuth` function, that the header name agrees
-between client and server, and that nothing outside `lib/adminGate.ts` reads `ADMIN_CONSOLE_SECRET`.
-Deleting a `adminSecretGate(request)` line fails it — checked 2026-10-08.
+`check:gate` is the equivalent for `lib/adminGate.ts` and the two Admin Console routes: fail closed
+(missing env → 503, wrong/absent header → 401, right header → null, padded value matches), every
+handler gates before `lib/adminAuth`, the header name agrees between client and server, and nothing
+outside `lib/adminGate.ts` reads `ADMIN_CONSOLE_SECRET`.
+
+`check:auth` covers the sign-in chain: `sessionFromAuth` accepts claims-style and client-style
+identities and reads only `app_metadata`; `permissionGate` fails closed with 403 (never 401);
+`proxy.ts` redirects pages to `/sign-in`, answers `/api` with 403 JSON, uses `getClaims`, and its
+matcher excludes `_next`; every screen carries its `<screen>.view` gate and every write screen its
+`can('<screen>.manage')`; the admin routes run the secret gate then the permission check before the
+credential; nothing outside `lib/permissions.ts` reads `user_metadata`.
 
 If you see `TS2307 Cannot find module '...app/(auth)/...'` from `.next/*/types/validator.ts`, those
 are stale generated route validators from a previous `next dev`. `Remove-Item -Recurse -Force .next`
-and rebuild; `next build` regenerates them.
+and rebuild. Typed routes mean a brand-new route (e.g. `/sign-in`) only gains its type after a build
+or dev run.
 
-Runtime checks against the **production** deployment — every one of these returns a Vercel SSO
-redirect while Deployment Protection is on (§8):
-
-```powershell
-$site = "https://inventory-app-thimsin.vercel.app"
-curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" $site/          # 302 to vercel.com/sso-api
-curl.exe -s -o NUL -w "%{http_code}" "$site/login"                      # 404 now, no such route
-curl.exe -s -o NUL -w "%{http_code}" "$site/admin/users"                # 302: it exists, behind the same gate
-```
-
-**`vercel curl` gets past Deployment Protection with the authenticated CLI**, which is the only
-credential-free way to read a response body from production. It is how §5 item 10 was diagnosed.
-The flag forms (`-o`, `-w`) are not intercepted, so pipe stdout instead:
+Locally (a dev server is usually already listening on :3000; the proxy is running in Next 16):
 
 ```powershell
-vercel curl -s https://inventory-app-thimsin.vercel.app/api/admin/users
-#   401 {"error":"Admin console secret required."}     <- the gate, working
-vercel curl -s -i https://inventory-app-thimsin.vercel.app/api/admin/users   # status + headers
+curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" http://localhost:3000/          # 302 -> /sign-in, no session
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/sign-in                     # 200
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/login                       # 404, no such route
+curl.exe -s http://localhost:3000/api/supabase-test                                     # 403 {"error":"Sign-in required."}
 ```
 
-Locally (a dev server is usually already listening on :3000):
-
-```powershell
-curl.exe -s -o NUL -w "%{http_code} -> %{redirect_url}" http://localhost:3000/          # 200, no redirect
-curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/login                       # 404
-curl.exe -s http://localhost:3000/api/supabase-test                                     # {"status":"ready",...}
-```
+With a signed-in session cookie the same `/` answers 200 and `/api/supabase-test` returns its
+diagnostic. Production is behind Vercel Deployment Protection, so curl gets a SSO redirect; the
+authenticated CLI is needed there (§8).
 
 ---
 
 ## 8. Deployment
 
-- `git push origin main` is the whole deploy. The Vercel Git integration is connected and it does
-  build automatically — verified, not assumed.
-- **Nothing in the repo configures this.** There is no `.github/` directory, and `vercel.json` only
-  sets `framework`, `regions` and security headers; that file cannot enable push-to-deploy. If a push
-  ever seems inert, re-check that the repo is still imported at vercel.com/new.
-- **Vercel Deployment Protection is the only access control this application has.** With auth removed,
-  there is no second layer: whatever it lets through gets full read and write on all nine tables
-  (§3). It is ON today, which means:
-  - Only Vercel-account users can reach the app at all. Ordinary staff need an account in your
-    Vercel team, which is probably not what a school wants.
-  - If anyone flips it off under **Project Settings → Deployment Protection** to share the link, the
-    app becomes world-open and the Supabase project is reachable directly with the public key.
-  - Treat it as a shared, undocumented gate. If this deployment is meant to be usable by people
-    without Vercel accounts, that requires building an auth layer again — it cannot be solved by
-    config alone, because RLS has no identity to check.
-- **Tooling on this machine:** `gh` is installed but **not** authenticated (`gh auth login` needed, so
-  check runs cannot be read). The `vercel` CLI **is** authenticated (device login as
-  `thimsin79-8849`, 2026-10-08) and the project **is** linked — `.vercel/project.json` exists and
-  `.gitignore` covers it. That makes `vercel env ls/add/rm`, `vercel redeploy <url>`, `vercel logs`,
-  `vercel ls` and `vercel curl` all usable without a dashboard. There is still no `VERCEL_TOKEN`, so
-  anything outside the CLI needs a browser session.
-- **Runtime env the Admin Console needs:** `SUPABASE_ACCESS_TOKEN` must be set in Vercel Project
-  Settings → Environment Variables, or `/api/admin/users*` returns 502 with an actionable message
-  that the Users screen shows. It is read only on the server by `lib/adminAuth.ts` and never ships to
-  the browser. `.env.local` carries a working Database Read-write PAT for local development; Vercel
-  needs its own copy with the same scope. `ADMIN_CONSOLE_SECRET` is the second one (§3): without it
-  the routes answer 503 and the Users screen stays locked. Both are server-only, and the same
-  secret value in `.env.local` and Vercel means staff type it once. **Changing an env var does
-  nothing for the live site until a new deployment exists** — `vercel redeploy <url>` or a push.
+- `git push origin main` is the whole deploy. The Vercel Git integration is connected and builds
+  automatically. Nothing in the repo configures it; `vercel.json` only sets `framework`, `regions`
+  and security headers.
+- **Access control today is the app's own auth, not Vercel SSO.** The 2026-10-09 layer means the
+  data is protected even if Deployment Protection is switched off: `anon` cannot query the project
+  (§3). Deployment Protection is still ON and still useful — it keeps a pre-auth build from being
+  reachable by URL guessing while you are mid-migration — but it is no longer the boundary. The
+  2026-10-06 note ("the only access control this application has") is **stale**: since 2026-10-09
+  RLS and the proxy carry the boundary, and SSO is belt-and-braces.
+- Sign-in uses **email + password against Supabase Auth** (no SSO providers configured). A user
+  created in the Admin Console (or the dashboard) signs in at `/sign-in`; their
+  `app_metadata.permissions` decide what they see (§3).
+- **Tooling on this machine:** `gh` is installed but **not** authenticated. The `vercel` CLI **is**
+  authenticated (device login as `thimsin79-8849`, 2026-10-08) and the project **is** linked —
+  `.vercel/project.json` exists and `.gitignore` covers it. `vercel env ls/add/rm`, `vercel
+  redeploy <url>`, `vercel logs`, `vercel ls` and `vercel curl` all work without a dashboard. There
+  is still no `VERCEL_TOKEN`, so anything outside the CLI needs a browser session.
+- **Runtime env the Admin Console needs:** `SUPABASE_ACCESS_TOKEN` (Management-API PAT, server-only,
+  read by `lib/adminAuth.ts` and the §9 SQL runner) and `ADMIN_CONSOLE_SECRET` (shared secret, read
+  by `lib/adminGate.ts`) must both exist in Vercel or the console refuses. `.env.local` carries
+  working values. The same secret value locally and in Vercel means staff type it once.
+  **Changing an env var does nothing for the live site until a new deployment exists.**
+- Deployment Protection still 302s anonymous traffic to Vercel SSO, so **`vercel curl` is the way
+  to read a response body from production**: it fetches through protection with the authenticated
+  CLI (flags after `--`; e.g. `vercel curl <url> -- --header "x-admin-secret: …"` — `-o`/`-w`/`-H`
+  before the separator fall through to a plain curl that the 302 blanks).
 - **Verifying a deploy with no credentials — and its limit.** Pick a string that exists in exactly
-  one commit, confirm it is absent from the parent (`git show <old-sha>:<file> | Select-String
-  <string>`), then grep the production HTML for it. Signature blocks in the HTML are useless for this
-  — they are deployment-specific, not commit-specific.
-
-  **This only works while Deployment Protection is OFF.** Checked 2026-10-06, pushing `fe6b98f`: with
-  protection on, `GET /` returns `302 -> https://vercel.com/sso-api?...` and the body is 14 bytes, so
-  there is no HTML to grep. It 302s `/login` too, so the "route now 404s" test from §7 is equally
-  blind — nothing in the response distinguishes a deployed build from an undeployed one.
-
-  What you can verify with no credentials is that the commit reached the remote:
-  `git ls-remote origin -h refs/heads/main` should print that sha. Everything past that — build
-  success, live rollout — needs a Vercel session in a browser, `gh auth login`, or a
-  `VERCEL_TOKEN`. Decide for a given deploy which one you are relying on rather than assuming the
-  push implies the deploy.
-
-  **With the authenticated CLI, none of that blindness applies** — `vercel curl <url>` fetches the
-  real body through Deployment Protection (curl flags go after `--`, e.g.
-  `vercel curl <url> -- --header "x-admin-secret: …"`; `-o`/`-w`/`-H` before the separator are *not*
-  intercepted and fall through to a plain curl, which the 302 then blanks). That is how the gate and
-  the Admin Console were verified in production on 2026-10-08, and `vercel ls` (newest deployment
-  `● Ready`) plus `vercel logs <url>` cover the build side. See §7 for the exact probes.
+  one commit, confirm it is absent from the parent, then grep the production HTML for it — but only
+  while Deployment Protection is OFF, because the SSO redirect gives back a 14-byte body otherwise.
+  `git ls-remote origin -h refs/heads/main` shows the commit reached the remote; build success and
+  live rollout need a Vercel session or the authenticated CLI.
 
 ---
 
 ## 9. Gotchas
 
-- The **WebCRX** browser extension injects attributes onto `<html>`, which caused a hydration mismatch.
-  It is suppressed on `<html>` in `app/layout.tsx`; disabling the extension removes the need.
-- Typed routes are enabled. Global helpers like `LayoutProps<"/">` are generated per route, so a
-  brand-new route's type only exists after a build or dev run. Deleting a route leaves a stale
-  validator in `.next/` until you clear it. New layouts type `children` as `{ children: ReactNode }`.
+- The **WebCRX** browser extension injects attributes onto `<html>`, which caused a hydration
+  mismatch. It is suppressed on `<html>` in `app/layout.tsx`.
+- **Typed routes are enabled.** A brand-new route's type exists only after a build or dev run;
+  deleting a route leaves a stale validator in `.next/` until you clear it. New layouts type
+  `children` as `{ children: ReactNode }`.
+- **Next 16 renames middleware to `proxy.ts`** with a `proxy` export, running on the Node runtime
+  at the project root by default. Read the proxy guide in `node_modules/next/dist/docs/` before
+  changing it. The matcher excludes `_next` (dev HMR must not build an SSR page for every chunk).
 - Read the matching guide in `node_modules/next/dist/docs/` before using any Next.js API — this
   version has breaking changes (see `AGENTS.md`).
 - `.env*` is gitignored. Keep `.env.example` in sync with the variables the code actually reads:
-  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  and the two server-only ones: `SUPABASE_ACCESS_TOKEN` (read by `lib/adminAuth.ts`) and
-  `ADMIN_CONSOLE_SECRET` (read by `lib/adminGate.ts`).
-  Never put a `NEXT_PUBLIC_` prefix on the token. There is **no** `SUPABASE_SERVICE_ROLE_KEY` any
-  more — nothing in the repo reads it.
-- **Running SQL from this machine:** no `psql`, no Supabase CLI, and no usable network path to the
-  database — `db.<ref>.supabase.co` has no A record (IPv6-only) and this machine has no IPv6 route,
-  and the pooler hostname is NXDOMAIN. The only route is the Management API
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` (legacy alias), and the two server-only ones:
+  `SUPABASE_ACCESS_TOKEN` (read by `lib/adminAuth.ts`) and `ADMIN_CONSOLE_SECRET` (read by
+  `lib/adminGate.ts`). Never put a `NEXT_PUBLIC_` prefix on the token. There is **no**
+  `SUPABASE_SERVICE_ROLE_KEY` anymore.
+- **Running SQL from this machine:** no `psql`, no Supabase CLI, no usable network path to the
+  database — `db.<ref>.supabase.co` has no A record (IPv6-only) and this machine has no IPv6 route.
+  The only route is the Management API
   `POST https://api.supabase.com/v1/projects/bktxzesvtmgcmznsfnlu/database/query` with a **scoped
-  PAT (permission Database → Read-write)**; one lives in `.env.local` as `SUPABASE_ACCESS_TOKEN`.
-  It answers 201 on success. `schema.sql` and `seed.sql` are idempotent and safe to re-run; verify
-  anon access afterwards with the probe in §5 item 1.
-- `NEXT_PUBLIC_*` values ship to the browser. There is no server-side secret to protect, because
-  nothing in this app runs with elevated database access — except the two Admin Console variables
-  above, which are exactly the ones that must never get the prefix.
+  PAT (permission Database → Read-write)**; one lives in `.env.local` as `SUPABASE_ACCESS_TOKEN`. It
+  answers 201 on success. `schema.sql` and `seed.sql` are idempotent and safe to re-run; verify live
+  afterwards with the §7 probes.
+- `NEXT_PUBLIC_*` values ship to the browser by design. The publishable key is public. The two
+  server-only variables above are the ones that must never get the prefix.
 - **A pasted env value can arrive with a UTF-8 BOM (U+FEFF)** in front of it, which is invisible in
   a dashboard and fatal in a header: `fetch` throws `Cannot convert argument to a ByteString … 65279`
   at index 7 of `Bearer <token>` (§5 item 10). Write the file with Node rather than pasting, prefer
   `vercel env add NAME env < file` over a PowerShell pipe, and the code trims anyway.
+- **Auth sharp edges:** `signUp`/`signInWithPassword` require the GoTrue `/auth/v1` endpoint of the
+  project (works with the publishable key). Setting a user's `app_metadata.permissions` is only done
+  by the Admin Console (`lib/adminAuth.ts`), never by the user's own client. There is no
+  "forgot password" or invite flow; the console's Password reset is the path. Account creation from
+  the CLI/dashboard, not from SQL, keeps `auth.identities` consistent (see `createAuthUser` in
+  `lib/adminAuth.ts` for why the console builds both rows in one statement).

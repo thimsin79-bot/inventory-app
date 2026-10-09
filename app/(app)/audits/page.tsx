@@ -7,6 +7,8 @@ import { errorMessage } from '@/utils/errors'
 import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
+import { useAuth } from '@/components/AuthProvider'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
@@ -14,6 +16,8 @@ import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge
 type Row = Tables<'audits'>
 
 export default function AuditsPage() {
+  const { can } = useAuth()
+  const manage = can('audits.manage')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -80,9 +84,11 @@ export default function AuditsPage() {
         title="Audits"
         description="Physical stock counts compared against system quantity."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-            New audit
-          </Button>
+          manage && (
+            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+              New audit
+            </Button>
+          )
         }
       />
 
@@ -90,14 +96,16 @@ export default function AuditsPage() {
       {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
 
       <Card>
-        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-          <DataTable
-            columns={columns}
-            rows={state.data ?? []}
-            rowKey={(r) => r.id}
-            empty={<EmptyState title="No audits" hint="Record a stock count to reconcile system quantity." />}
-          />
-        </AsyncBoundary>
+        <ScreenGate permission="audits.view">
+          <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+            <DataTable
+              columns={columns}
+              rows={state.data ?? []}
+              rowKey={(r) => r.id}
+              empty={<EmptyState title="No audits" hint="Record a stock count to reconcile system quantity." />}
+            />
+          </AsyncBoundary>
+        </ScreenGate>
       </Card>
 
       <Modal

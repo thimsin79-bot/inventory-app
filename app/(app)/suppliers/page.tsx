@@ -4,6 +4,7 @@ import { getSuppliers } from '@/services/inventoryService'
 import type { Tables } from '@/types/database.types'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 
@@ -36,14 +37,16 @@ export default function SuppliersPage() {
     <>
       <PageHeader title="Suppliers" description="Vendors referenced by purchase orders." />
       <Card>
-        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-          <DataTable
-            columns={columns}
-            rows={state.data ?? []}
-            rowKey={(r) => r.id}
-            empty={<EmptyState title="No suppliers" hint="Run supabase/seed.sql to populate reference data." />}
-          />
-        </AsyncBoundary>
+        <ScreenGate permission="suppliers.view">
+          <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+            <DataTable
+              columns={columns}
+              rows={state.data ?? []}
+              rowKey={(r) => r.id}
+              empty={<EmptyState title="No suppliers" hint="Run supabase/seed.sql to populate reference data." />}
+            />
+          </AsyncBoundary>
+        </ScreenGate>
       </Card>
     </>
   )

@@ -5,12 +5,16 @@ import {
   listAuthUsers,
 } from '@/lib/adminAuth'
 import { adminSecretGate } from '@/lib/adminGate'
+import { permissionCheck } from '@/lib/auth'
 import type { PermissionKey } from '@/lib/permissions'
 import { errorMessage } from '@/utils/errors'
 
 export async function GET(request: Request) {
   const gate = adminSecretGate(request)
   if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const denied = await permissionCheck('admin.view')
+  if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status })
 
   try {
     return NextResponse.json({ users: await listAuthUsers() })
@@ -22,6 +26,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const gate = adminSecretGate(request)
   if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const denied = await permissionCheck('admin.manage')
+  if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status })
 
   let body: Record<string, unknown>
   try {

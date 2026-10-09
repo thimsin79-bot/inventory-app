@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { deleteAuthUser, updateAuthUser } from '@/lib/adminAuth'
 import { adminSecretGate } from '@/lib/adminGate'
+import { permissionCheck } from '@/lib/auth'
 import type { PermissionKey } from '@/lib/permissions'
 import { errorMessage } from '@/utils/errors'
 
@@ -11,6 +12,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export async function PATCH(request: Request, context: RouteContext) {
   const gate = adminSecretGate(request)
   if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const denied = await permissionCheck('admin.manage')
+  if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status })
 
   const { id } = await context.params
   if (!UUID.test(id)) {
@@ -69,6 +73,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(request: Request, context: RouteContext) {
   const gate = adminSecretGate(request)
   if (gate) return NextResponse.json({ error: gate.message }, { status: gate.status })
+
+  const denied = await permissionCheck('admin.manage')
+  if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status })
 
   const { id } = await context.params
   if (!UUID.test(id)) {

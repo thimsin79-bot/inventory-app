@@ -7,6 +7,7 @@ import type { Tables } from '@/types/database.types'
 import { formatDate, formatMoney } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 
@@ -83,70 +84,72 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description="Inventory position across all warehouses." />
 
-      <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
-          {tiles.map((t) => (
-            <Card key={t.label} className="px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t.label}</p>
-              <p
-                className={`mt-1 text-2xl font-semibold tabular-nums ${
-                  'tone' in t && t.tone === 'warn'
-                    ? 'text-amber-700 dark:text-amber-400'
-                    : 'text-zinc-900 dark:text-zinc-50'
-                }`}
-              >
-                {t.value}
+      <ScreenGate permission="dashboard.view">
+        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+            {tiles.map((t) => (
+              <Card key={t.label} className="px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t.label}</p>
+                <p
+                  className={`mt-1 text-2xl font-semibold tabular-nums ${
+                    'tone' in t && t.tone === 'warn'
+                      ? 'text-amber-700 dark:text-amber-400'
+                      : 'text-zinc-900 dark:text-zinc-50'
+                  }`}
+                >
+                  {t.value}
+                </p>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Card>
+              <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Needs restocking</h2>
+                <Link href="/inventory" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
+                  View inventory
+                </Link>
+              </div>
+              <DataTable
+                columns={lowColumns}
+                rows={lowStockItems}
+                rowKey={(r) => r.id}
+                empty={<EmptyState title="Stock levels healthy" hint="No item is at or below its minimum quantity." />}
+              />
+            </Card>
+
+            <Card>
+              <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Recent stock movements</h2>
+                <Link href="/transactions" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
+                  All transactions
+                </Link>
+              </div>
+              <DataTable
+                columns={txnColumns}
+                rows={state.data?.transactions ?? []}
+                rowKey={(r) => r.id}
+                empty={<EmptyState title="No movements yet" hint="Record one from the Inventory screen." />}
+              />
+            </Card>
+          </div>
+
+          {state.data && state.data.requests.filter((r) => r.status === 'Pending').length > 0 && (
+            <Card className="mt-6 px-4 py-3">
+              <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+                  {state.data.requests.filter((r: RequestRow) => r.status === 'Pending').length} request(s)
+                </span>{' '}
+                awaiting approval.{' '}
+                <Link href="/requests" className="text-sky-700 hover:underline dark:text-sky-400">
+                  Review requests
+                </Link>
               </p>
             </Card>
-          ))}
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Card>
-            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Needs restocking</h2>
-              <Link href="/inventory" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
-                View inventory
-              </Link>
-            </div>
-            <DataTable
-              columns={lowColumns}
-              rows={lowStockItems}
-              rowKey={(r) => r.id}
-              empty={<EmptyState title="Stock levels healthy" hint="No item is at or below its minimum quantity." />}
-            />
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Recent stock movements</h2>
-              <Link href="/transactions" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
-                All transactions
-              </Link>
-            </div>
-            <DataTable
-              columns={txnColumns}
-              rows={state.data?.transactions ?? []}
-              rowKey={(r) => r.id}
-              empty={<EmptyState title="No movements yet" hint="Record one from the Inventory screen." />}
-            />
-          </Card>
-        </div>
-
-        {state.data && state.data.requests.filter((r) => r.status === 'Pending').length > 0 && (
-          <Card className="mt-6 px-4 py-3">
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              <span className="font-semibold text-zinc-900 dark:text-zinc-50">
-                {state.data.requests.filter((r: RequestRow) => r.status === 'Pending').length} request(s)
-              </span>{' '}
-              awaiting approval.{' '}
-              <Link href="/requests" className="text-sky-700 hover:underline dark:text-sky-400">
-                Review requests
-              </Link>
-            </p>
-          </Card>
-        )}
-      </AsyncBoundary>
+          )}
+          </AsyncBoundary>
+        </ScreenGate>
     </>
   )
 }

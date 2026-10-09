@@ -1,19 +1,22 @@
 /**
  * Checks the RLS boundary in supabase/schema.sql.
  *
- * There is no authentication and no role ladder, so the invariant this file guards
- * is not a permission matrix. It is that the schema and the grants agree with each
- * other, because that agreement is invisible when it breaks: a policy with no grant
- * is `permission denied for table`, and a grant with no policy is zero rows. Both
- * render as an empty table in the UI, which reads as "no data yet" rather than
- * "misconfigured".
+ * The boundary is a single split: requests with a Supabase Auth session present
+ * as `authenticated`, requests without one as `anon`, and `anon` must touch
+ * nothing. Permission granularity lives in the app (app_metadata.permissions),
+ * deliberately not in these policies, so the invariant this file guards is that
+ * the schema and the grants agree with each other -- the agreement is invisible
+ * when it breaks: a policy with no grant is `permission denied for table`, and a
+ * grant with no policy is zero rows. Both render as an empty table in the UI,
+ * which reads as "no data yet" rather than "misconfigured".
  *
  * So it checks that:
  *
  *   - all nine tables are declared and all nine have RLS enabled
  *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
- *   - the policies target `anon`, which is the role the publishable key presents
- *   - `anon` is granted the same commands the policies cover
+ *   - the policies target `authenticated` and never `anon`
+ *   - `authenticated` is granted the same commands the policies cover
+ *   - `anon` is granted nothing and revoked from every table
  *   - DELETE stays withheld on the four tables no screen can delete from
  *   - nothing from the removed role ladder survives (current_role, app_metadata)
  *   - no table is left readable through a `FOR ALL USING (true)` catch-all
@@ -116,14 +119,14 @@ check(
   [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length,
 )
 
-console.log('policies cover every command for anon')
+console.log('policies cover every command for authenticated')
 for (const command of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
-  check(`CREATE POLICY ... FOR ${command} TO anon is generated`, sql.includes(`FOR ${command} TO anon`))
+  check(`CREATE POLICY ... FOR ${command} TO authenticated is generated`, sql.includes(`FOR ${command} TO authenticated`))
 }
 check('every table gets both policies', sql.includes("'read on ' || t") && sql.includes("'write on ' || t"))
 check(
-  'policies target anon, which is what the publishable key presents',
-  !/FOR (SELECT|INSERT|UPDATE|DELETE) TO authenticated/.test(sql),
+  'policies never target anon, which must not touch anything',
+  !/FOR (SELECT|INSERT|UPDATE|DELETE) TO anon/.test(sql),
 )
 
 console.log('grants match the policies')
@@ -132,19 +135,23 @@ for (const table of TABLES) {
     ? 'SELECT, INSERT, UPDATE'
     : 'SELECT, INSERT, UPDATE, DELETE'
 
-  check(`${table} is granted ${expected} to anon`, sql.includes(`GRANT ${expected} ON public.${table} TO anon`))
+  check(`${table} is granted ${expected} to authenticated`, sql.includes(`GRANT ${expected} ON public.${table} TO authenticated`))
 }
-check('no table is granted to authenticated', !/GRANT[^;]*TO authenticated/.test(sql))
+check('no table is granted to anon', !/GRANT[^;]*TO anon/.test(sql))
 check(
   'every table is revoked from authenticated',
   TABLES.every((table) => sql.includes(`REVOKE ALL ON public.${table} FROM authenticated`)),
+)
+check(
+  'every table is revoked from anon',
+  TABLES.every((table) => sql.includes(`REVOKE ALL ON public.${table} FROM anon`)),
 )
 
 console.log('DELETE stays withheld where no screen deletes')
 for (const table of NO_DELETE) {
   check(`${table} withholds DELETE`, !new RegExp(`GRANT[^;]*DELETE[^;]*ON public\\.${table} TO`).test(sql))
 }
-check('items keeps DELETE, the inventory screen deletes items', sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon'))
+check('items keeps DELETE, the inventory screen deletes items', sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated'))
 
 console.log('the removed role ladder leaves nothing behind')
 // The teardown statements are allowed; what must not come back is a definition.

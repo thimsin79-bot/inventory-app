@@ -7,6 +7,8 @@ import { errorMessage } from '@/utils/errors'
 import { formatDate, formatMoney } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
+import { useAuth } from '@/components/AuthProvider'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
@@ -16,6 +18,8 @@ type Row = Tables<'purchases'> & { supplier: Tables<'suppliers'> | null }
 const STATUSES = ['Pending', 'Partial', 'Received', 'Cancelled'] as const
 
 export default function PurchasesPage() {
+  const { can } = useAuth()
+  const manage = can('purchases.manage')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -78,20 +82,22 @@ export default function PurchasesPage() {
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ]
 
-  columns.push({
-    key: 'actions',
-    header: '',
-    className: 'text-right',
-    render: (r) => (
-      <div className="flex flex-wrap justify-end gap-1">
-        {STATUSES.filter((s) => s !== r.status).map((s) => (
-          <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
-            {s}
-          </Button>
-        ))}
-      </div>
-    ),
-  })
+  if (manage) {
+    columns.push({
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (r) => (
+        <div className="flex flex-wrap justify-end gap-1">
+          {STATUSES.filter((s) => s !== r.status).map((s) => (
+            <Button key={s} size="sm" disabled={busy} onClick={() => setStatus(r, s)}>
+              {s}
+            </Button>
+          ))}
+        </div>
+      ),
+    })
+  }
 
   return (
     <>
@@ -99,9 +105,11 @@ export default function PurchasesPage() {
         title="Purchases"
         description="Purchase orders raised with suppliers."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
-            New purchase
-          </Button>
+          manage && (
+            <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+              New purchase
+            </Button>
+          )
         }
       />
 
@@ -109,14 +117,16 @@ export default function PurchasesPage() {
       {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
 
       <Card>
-        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-          <DataTable
-            columns={columns}
-            rows={state.data ?? []}
-            rowKey={(r) => r.id}
-            empty={<EmptyState title="No purchase orders" hint="Raise one against a supplier to get started." />}
-          />
-        </AsyncBoundary>
+        <ScreenGate permission="purchases.view">
+          <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+            <DataTable
+              columns={columns}
+              rows={state.data ?? []}
+              rowKey={(r) => r.id}
+              empty={<EmptyState title="No purchase orders" hint="Raise one against a supplier to get started." />}
+            />
+          </AsyncBoundary>
+        </ScreenGate>
       </Card>
 
       <Modal

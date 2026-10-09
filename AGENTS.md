@@ -16,13 +16,15 @@ boundary, the live row counts, the open security issues, and the verification co
 Hard rules for this repo:
 
 - Read the matching guide in `node_modules/next/dist/docs/` before using any Next.js API.
-- **There is no authentication.** Login, signup, the session proxy, `lib/roles.ts`,
-  `lib/supabase/dal.ts` and `/admin/users` were deleted on 2026-10-06. Do not add a
-  server-side session read back without reading CLAUDE.md §3 and §8 first.
-- All data access is client-side through `services/inventoryService.ts`. The policies in
-  `supabase/schema.sql` grant `anon` full read and write and are deliberately **not** a
-  security boundary — Vercel Deployment Protection is the only gate. Never widen or narrow
-  a policy to make a query pass without re-reading CLAUDE.md §3.
+- **There is an authentication layer again** (built 2026-10-09 on the 2026-10-06 removal):
+  `/sign-in`, a root `proxy.ts` session gate, RLS flipped to `authenticated`-only, and per-screen
+  permissions from `app_metadata.permissions`. Read CLAUDE.md §3 before touching RLS or the proxy;
+  do not widen a policy to `anon` or add `user_metadata` reads.
+- All data access is client-side through `services/inventoryService.ts`. It only works with a
+  signed-in session: `anon` is revoked from every table, and the proxy refuses session-less
+  requests (pages → `/sign-in`, `/api/*` → 403 JSON).
+- The Admin Console routes are gated twice: `adminSecretGate` (shared secret) then
+  `permissionCheck('admin.view' | 'admin.manage')`, never the reverse order.
 - Reuse the primitives in `components/ui.tsx` and follow the existing
   `useAsyncData` + `AsyncBoundary` screen pattern.
 - Never commit, echo, or paste keys. `.env*` is gitignored.

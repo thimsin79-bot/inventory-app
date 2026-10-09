@@ -165,18 +165,21 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 -- ==============================================================================
 -- Policies
 -- ==============================================================================
--- There is no authentication and no role ladder. The app talks to the database
--- with the publishable key, which PostgREST presents as the `anon` role, so every
--- request from this application is an `anon` request and there is nothing in the
--- JWT to branch on.
+-- The app talks to the database with the publishable key, but every request now
+-- goes through `/sign-in` and `proxy.ts` first, so PostgREST sees either a real
+-- Supabase Auth session (presented as the `authenticated` role) or nothing
+-- (`anon`). These policies are the second gate (the first is the proxy): `anon`
+-- matches nothing, so an unauthenticated request touches no rows.
 --
--- That means these policies grant `anon` full read and write on all nine tables.
--- **They are not a security boundary.** Anyone who can reach the Supabase project
--- can read and write all of it. The only gate in front of this app is Vercel
--- Deployment Protection (Project Settings -> Deployment Protection), which
--- 302s anonymous traffic to Vercel SSO. If that is switched off, or the Supabase
--- project is reached directly, the data is open. The policies below exist so the
--- app functions, not so it is safe.
+-- The finer-grained authorization model lives in the application layer, in the
+-- session JWT: each user's `app_metadata.permissions` list (edited in
+-- /admin/users) is what the screens and API routes branch on. RLS distinguishes
+-- only signed-in (`authenticated`) from not signed-in (`anon`) -- it does NOT
+-- branch on permissions. The policies below are deliberately `USING (true)`,
+-- so permission enforcement stays in the app, and the honest boundary is: a raw
+-- client with any valid signed-in session can reach every row. Moving the
+-- nine-permission matrix into SQL is punted on because the tables are shared
+-- across screens and the permission set changes per user at runtime.
 --
 -- One policy per table per command -- four per table, generated rather than
 -- written out longhand because nine tables times four commands is thirty-six
@@ -188,10 +191,9 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 --   write on <table> (update)  UPDATE
 --   write on <table> (delete)  DELETE
 --
--- `TO anon` rather than the default `TO public`, so the grant is an accurate
--- statement about who this is for. It also fails closed: if accounts are ever
--- reintroduced, a signed-in `authenticated` request matches nothing until the
--- policies are revisited deliberately.
+-- `TO authenticated` rather than the default `TO public`, so the grant is an
+-- accurate statement about who this is for. It also fails closed: `anon` matches
+-- nothing, so a session-less request gets zero rows or permission denied.
 --
 -- WITH CHECK is as load-bearing as USING. Without it a caller could insert a row,
 -- or update one, that the USING clause would never have let them see.
@@ -224,22 +226,22 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'write on ' || t, t);
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR SELECT TO anon USING (true)',
+      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (true)',
       'read on ' || t, t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR INSERT TO anon WITH CHECK (true)',
+      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (true)',
       'write on ' || t || ' (insert)', t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR UPDATE TO anon USING (true) WITH CHECK (true)',
+      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (true) WITH CHECK (true)',
       'write on ' || t || ' (update)', t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR DELETE TO anon USING (true)',
+      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (true)',
       'write on ' || t || ' (delete)', t
     );
   END LOOP;
@@ -259,13 +261,16 @@ DROP SCHEMA IF EXISTS private CASCADE;
 -- with no table grant gets `permission denied for table` regardless of policy.
 -- Supabase stopped auto-exposing new public-schema tables to the Data API
 -- (enforced for all projects on 2026-10-30), so these are granted explicitly
--- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing `anon`
+-- per table rather than via ALL TABLES IN SCHEMA public, to avoid handing a role
 -- access to anything added later by accident.
--- Grants are additive, and the live database predates this file: an earlier run
+--
+-- Grants are additive, and the live database predates this file: earlier runs
 -- left `anon` with every table privilege, including DELETE on the four tables
 -- below and TRUNCATE / REFERENCES / TRIGGER anywhere -- none of which any screen
 -- uses. A grant is invisible next to a policy, so revoking first is what makes
--- the GRANTs that follow the whole truth on any starting state.
+-- the GRANTs that follow the whole truth on any starting state. Both `anon` and
+-- `authenticated` are revoked before anything is granted, so the GRANTs below
+-- are the whole truth about who can touch the data.
 REVOKE ALL ON public.categories FROM anon;
 REVOKE ALL ON public.suppliers FROM anon;
 REVOKE ALL ON public.warehouses FROM anon;
@@ -276,25 +281,6 @@ REVOKE ALL ON public.transactions FROM anon;
 REVOKE ALL ON public.requests FROM anon;
 REVOKE ALL ON public.audits FROM anon;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
-
--- The one limit that survives the removal of roles: no screen deletes a purchase,
--- transaction, request or audit, and `services/inventoryService.ts` exports no
--- delete for them either -- so DELETE is withheld rather than left to the
--- policies alone. If a delete feature is ever added for one of these, add the
--- grant in the same change. `items` keeps DELETE because the inventory screen
--- does delete items.
-GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
-GRANT SELECT, INSERT, UPDATE ON public.transactions TO anon;
-GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
-GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;
-
--- `authenticated` is granted nothing, so an account that still exists in the
--- Supabase project from before cannot be used as a way in.
 REVOKE ALL ON public.categories FROM authenticated;
 REVOKE ALL ON public.suppliers FROM authenticated;
 REVOKE ALL ON public.warehouses FROM authenticated;
@@ -304,3 +290,19 @@ REVOKE ALL ON public.purchases FROM authenticated;
 REVOKE ALL ON public.transactions FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated;
+
+-- The one limit beyond the anon/authenticated split: no screen deletes a
+-- purchase, transaction, request or audit, and `services/inventoryService.ts`
+-- exports no delete for them either -- so DELETE is withheld at the grant. If a
+-- delete feature is ever added for one of these, add the grant in the same
+-- change. `items` keeps DELETE because the inventory screen does delete items.
+GRANT SELECT, INSERT, UPDATE ON public.purchases TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.transactions TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.requests TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.audits TO authenticated;

@@ -2,10 +2,11 @@
  * The permission catalog the Admin Console ticks for each user.
  *
  * Keys are stored in the user's Supabase Auth `app_metadata.permissions`
- * array. Nothing reads them for enforcement yet — sign-in has not been
- * built (§3) — but GoTrue embeds `app_metadata` in the access token, so
- * when sign-in arrives, enforcement can read the same list from the
- * session with no extra lookup.
+ * array. GoTrue embeds `app_metadata` in the access token, so enforcement
+ * reads the same list from the session with no extra lookup — in the UI
+ * through `components/AuthProvider.tsx` and on the Admin Console routes
+ * through `lib/auth.ts`. `user_metadata` is never consulted: the user can
+ * edit it themselves, so it cannot decide anything.
  *
  * `<screen>.view`   may open the screen.
  * `<screen>.manage` may create, edit and delete within it. The reference
@@ -60,4 +61,38 @@ export const ALL_PERMISSIONS: PermissionKey[] = PERMISSION_GROUPS.flatMap((group
 export function sanitizePermissions(value: unknown): PermissionKey[] {
   const list = Array.isArray(value) ? value : []
   return ALL_PERMISSIONS.filter((key) => list.includes(key))
+}
+
+/**
+ * The signed-in identity every gate branches on.
+ */
+export type SessionUser = {
+  id: string
+  email: string
+  permissions: PermissionKey[]
+}
+
+/**
+ * Reduces an untrusted auth object — an access-token claim set from
+ * `getClaims()` (id under `sub`) or a `session.user` from the browser client
+ * (id under `id`) — to the shape the gates use. Returns null when there is no
+ * id to stand on, so a malformed token is nobody rather than somebody with
+ * empty permissions.
+ */
+export function sessionFromAuth(input: unknown): SessionUser | null {
+  if (!input || typeof input !== 'object') return null
+  const raw = input as { id?: unknown; sub?: unknown; email?: unknown; app_metadata?: unknown }
+  const id = typeof raw.id === 'string' && raw.id ? raw.id : typeof raw.sub === 'string' && raw.sub ? raw.sub : null
+  if (!id) return null
+
+  const appMetadata =
+    raw.app_metadata && typeof raw.app_metadata === 'object'
+      ? (raw.app_metadata as { permissions?: unknown })
+      : null
+
+  return {
+    id,
+    email: typeof raw.email === 'string' ? raw.email : '',
+    permissions: sanitizePermissions(appMetadata?.permissions),
+  }
 }

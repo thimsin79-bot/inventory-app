@@ -6,6 +6,7 @@ import type { Tables } from '@/types/database.types'
 import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Badge, Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 import { MOVEMENT_TYPES } from '@/components/MovementForm'
@@ -65,19 +66,21 @@ export default function TransactionsPage() {
         }
       />
       <Card>
-        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-          {rows.length === 0 ? (
-            <EmptyState title="No transactions" hint="Record a stock movement from the Inventory screen." />
-          ) : (
-            <>
-              <div className="border-b border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                Showing {rows.length} of {(state.data ?? []).length}{' '}
-                <Badge tone="info">most recent 50</Badge>
-              </div>
-              <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
-            </>
-          )}
-        </AsyncBoundary>
+        <ScreenGate permission="transactions.view">
+          <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+            {rows.length === 0 ? (
+              <EmptyState title="No transactions" hint="Record a stock movement from the Inventory screen." />
+            ) : (
+              <>
+                <div className="border-b border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                  Showing {rows.length} of {(state.data ?? []).length}{' '}
+                  <Badge tone="info">most recent 50</Badge>
+                </div>
+                <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
+              </>
+            )}
+          </AsyncBoundary>
+        </ScreenGate>
       </Card>
     </>
   )

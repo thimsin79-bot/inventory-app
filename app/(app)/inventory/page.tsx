@@ -16,6 +16,8 @@ import type { Tables, Inserts } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
+import { ScreenGate } from '@/components/ScreenGate'
+import { useAuth } from '@/components/AuthProvider'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { Button, Card, EmptyState, Input, PageHeader, StatusBadge, Badge } from '@/components/ui'
@@ -34,6 +36,8 @@ type ItemRow = Tables<'items'> & {
 }
 
 export default function InventoryPage() {
+  const { can } = useAuth()
+  const manage = can('inventory.manage')
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
   const [notice, setNotice] = useState<string | null>(null)
@@ -149,24 +153,26 @@ export default function InventoryPage() {
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   ]
 
-  columns.push({
-    key: 'actions',
-    header: '',
-    className: 'text-right',
-    render: (r) => (
-      <div className="flex justify-end gap-1">
-        <Button size="sm" onClick={() => setMoving(r)}>
-          Move
-        </Button>
-        <Button size="sm" onClick={() => openEdit(r)}>
-          Edit
-        </Button>
-        <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
-          Delete
-        </Button>
-      </div>
-    ),
-  })
+  if (manage) {
+    columns.push({
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (r) => (
+        <div className="flex justify-end gap-1">
+          <Button size="sm" onClick={() => setMoving(r)}>
+            Move
+          </Button>
+          <Button size="sm" onClick={() => openEdit(r)}>
+            Edit
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
+            Delete
+          </Button>
+        </div>
+      ),
+    })
+  }
 
   return (
     <>
@@ -195,9 +201,11 @@ export default function InventoryPage() {
                 </option>
               ))}
             </select>
-            <Button variant="primary" onClick={openCreate}>
-              New item
-            </Button>
+            {manage && (
+              <Button variant="primary" onClick={openCreate}>
+                New item
+              </Button>
+            )}
           </>
         }
       />
@@ -219,14 +227,16 @@ export default function InventoryPage() {
       )}
 
       <Card>
-        <AsyncBoundary loading={items.loading} error={items.error} errorCode={items.errorCode} onRetry={items.reload}>
-          <DataTable
-            columns={columns}
-            rows={items.data ?? []}
-            rowKey={(r) => r.id}
-            empty={<EmptyState title="No items yet" hint="Create your first inventory item, or run supabase/seed.sql for sample data." />}
-          />
-        </AsyncBoundary>
+        <ScreenGate permission="inventory.view">
+          <AsyncBoundary loading={items.loading} error={items.error} errorCode={items.errorCode} onRetry={items.reload}>
+            <DataTable
+              columns={columns}
+              rows={items.data ?? []}
+              rowKey={(r) => r.id}
+              empty={<EmptyState title="No items yet" hint="Create your first inventory item, or run supabase/seed.sql for sample data." />}
+            />
+          </AsyncBoundary>
+        </ScreenGate>
       </Card>
 
       <Modal
