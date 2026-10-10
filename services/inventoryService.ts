@@ -30,6 +30,7 @@ function nextId(prefix: string, length: number): string {
 export async function getInventoryItems(client?: Client, options?: {
   categoryId?: string
   search?: string
+  purchaseDate?: string
 }) {
   const supabase = getClient(client)
   let query = supabase
@@ -48,6 +49,10 @@ export async function getInventoryItems(client?: Client, options?: {
 
   if (options?.search) {
     query = query.or(`name.ilike.%${options.search}%,barcode.ilike.%${options.search}%,brand.ilike.%${options.search}%`)
+  }
+
+  if (options?.purchaseDate) {
+    query = query.eq('purchase_date', options.purchaseDate)
   }
 
   const { data, error } = await query

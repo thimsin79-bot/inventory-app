@@ -48,6 +48,7 @@ function stockLabel(r: Pick<ItemRow, 'qty' | 'min_qty'>): string {
 export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
+  const [purchaseDate, setPurchaseDate] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -60,8 +61,8 @@ export default function InventoryPage() {
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof ItemFormState, string>>>({})
 
   const loadItems = useCallback(
-    () => getInventoryItems(undefined, { categoryId, search }) as Promise<ItemRow[]>,
-    [categoryId, search],
+    () => getInventoryItems(undefined, { categoryId, search, purchaseDate }) as Promise<ItemRow[]>,
+    [categoryId, search, purchaseDate],
   )
 
   const items = useAsyncData(loadItems)
@@ -264,6 +265,19 @@ export default function InventoryPage() {
                 </option>
               ))}
             </Select>
+            <Input
+              type="date"
+              value={purchaseDate}
+              onChange={(e) => setPurchaseDate(e.target.value)}
+              aria-label="Filter by purchase date"
+              className="w-40"
+              title="Filter by date of purchase"
+            />
+            {purchaseDate && (
+              <Button size="sm" variant="secondary" onClick={() => setPurchaseDate('')}>
+                Clear date
+              </Button>
+            )}
             <Button variant="primary" onClick={openCreate}>
               New item
             </Button>
