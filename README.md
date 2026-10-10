@@ -43,7 +43,7 @@ This application has **no authentication, no sessions, no roles and no server-si
 holds one credential — the publishable key — and every request it makes reaches PostgREST as the
 `anon` role.
 
-`supabase/schema.sql` grants `anon` full read and write on all ten tables. **Those policies are
+`supabase/schema.sql` grants `anon` full read and write on all eleven tables. **Those policies are
 not a security boundary.** They exist so the app functions. Anyone who reaches the Supabase
 project directly can read and write everything, because the key is public by design.
 

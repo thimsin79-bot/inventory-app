@@ -23,7 +23,7 @@ consciously decided. Nothing below — environment variables, schema, headers �
 
 The app holds exactly one credential: the Supabase publishable key, which ships to the browser by
 design. Every database request therefore reaches PostgREST as the `anon` role, and
-`supabase/schema.sql` grants `anon` read and write on all ten tables. Those grants exist so the
+`supabase/schema.sql` grants `anon` read and write on all eleven tables. Those grants exist so the
 app functions; they are **not** a security boundary, and row level security cannot tighten them,
 because there is no identity for it to check.
 
@@ -73,29 +73,21 @@ code starts reading a new variable.
 Do this before the first deploy. A deploy succeeds even when it is missing, because nothing in the
 build touches the database — the gap only shows up as a boundary that does not match the repo.
 
-### Re-run `supabase/schema.sql` (blocking)
+### Re-run `supabase/schema.sql` (whenever it changes)
 
-`supabase/schema.sql` was rewritten on 2026-10-06 when authentication was removed, and it has
-**not been run against the live project yet**, so the live policies are whatever the previous run
-created rather than what this repo describes.
+`supabase/schema.sql` was last applied in full on 2026-10-10 through the Management API (§9), when
+the company-settings table and the `logos` storage bucket joined. The live policies, grants and
+bucket match the file. It still has to be run by hand after any change — nothing in the app
+executes SQL.
 
-Measured on 2026-10-06 with the publishable key straight against PostgREST (`select=*&count=exact`
-per table, read-only):
-
-| | categories | items | warehouses | suppliers | departments | purchases | transactions | requests | audits |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| observed | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-
-So anon **can** read — the app is not blank today — but only `items` has any data left. Two
-practical consequences: running this file is about making the boundary match the repo, and the
-row counts this project once had are gone, so run `supabase/seed.sql` too if you want a populated
-app.
+The seed rows this project once had are gone until `supabase/seed.sql` runs. Run it too if you
+want a populated app.
 
 Paste the whole file into the Supabase dashboard → **SQL Editor** → new query and run it. It is
 re-runnable: it drops its own policies by name, retires the older role-ladder and public-access
-policies, drops `private.current_role()` and the `private` schema itself, then generates
-`TO anon USING (true)` / `WITH CHECK (true)` policies on all ten tables and grants `anon`
-SELECT, INSERT, UPDATE and DELETE.
+policies, drops `private.current_role()` and the `private` schema itself, creates the `logos`
+bucket if missing, then generates `TO anon USING (true)` / `WITH CHECK (true)` policies on all
+eleven tables and grants `anon` SELECT, INSERT, UPDATE and DELETE.
 
 **No script in the repo executes SQL.** There is no migration runner and no CLI step; nothing in
 `npm run build` or the Vercel deploy touches the database. Running the file in the SQL editor is
@@ -103,8 +95,9 @@ a manual step, and nothing reminds you it is outstanding.
 
 Two details in the new script worth knowing:
 
-- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests` and `audits`,
-  because nothing in the app deletes them. `items` and the four reference tables keep it.
+- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests`, `audits` and
+  `company_settings`, because nothing in the app deletes them. `items`, `maintenance` and the four
+  reference tables keep it.
 - `authenticated` is revoked on every table, so an account left over from before the removal is
   not a way in.
 
@@ -173,7 +166,7 @@ Changing `regions` takes effect on the next deployment, and only for new deploym
 Run these locally before pushing:
 
 ```bash
-npm run check    # check:env + check:rls + check:gate, 22 / 53 / 22 assertions
+npm run check    # check:env + check:rls + check:gate, 22 / 57 / 22 assertions
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -234,7 +227,7 @@ unset or still holds the `.env.example` placeholder in the environment that buil
 variables are missing* below.
 
 **The page loads but every screen sits in an error state while `/api/supabase-test` says
-`unconfigured`.** Not a contradiction: the ten screens are static shells and the data fetch
+`unconfigured`.** Not a contradiction: the eleven screens are static shells and the data fetch
 happens in the browser. Every consumer shares `supabaseEnvProblems()` in `lib/supabase/env.ts`,
 so the diagnostic cannot disagree with the app about which variable is wrong.
 

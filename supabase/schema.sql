@@ -158,6 +158,46 @@ CREATE TABLE IF NOT EXISTS public.maintenance (
 -- next automatic reload, even though the table exists.
 NOTIFY pgrst, 'reload schema';
 
+-- 12. Company Settings
+-- Single-row configuration holding the school's identity (name, address,
+-- contact, logo) shown across the app. The CHECK forces exactly one row and the
+-- Settings screen upserts on id 1. `logo_path` names an object in the `logos`
+-- storage bucket, not an external URL.
+CREATE TABLE IF NOT EXISTS public.company_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    name TEXT NOT NULL DEFAULT '',
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    logo_path TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Logo storage. A public bucket so the logo serves without a signed URL; the
+-- Settings screen uploads with the anon role, and the policies below are the
+-- whole storage story for this bucket. The bucket insert is idempotent.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('logos', 'logos', true, 5242880, ARRAY['image/png','image/jpeg','image/webp','image/gif','image/svg+xml'])
+ON CONFLICT (id) DO NOTHING;
+
+GRANT USAGE ON SCHEMA storage TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon;
+GRANT SELECT ON storage.buckets TO anon;
+
+DROP POLICY IF EXISTS "logos public read" ON storage.objects;
+DROP POLICY IF EXISTS "logos anon upload" ON storage.objects;
+DROP POLICY IF EXISTS "logos anon update" ON storage.objects;
+DROP POLICY IF EXISTS "logos anon delete" ON storage.objects;
+CREATE POLICY "logos public read" ON storage.objects FOR SELECT USING (bucket_id = 'logos');
+CREATE POLICY "logos anon upload" ON storage.objects FOR INSERT TO anon WITH CHECK (bucket_id = 'logos');
+CREATE POLICY "logos anon update" ON storage.objects FOR UPDATE TO anon USING (bucket_id = 'logos') WITH CHECK (bucket_id = 'logos');
+CREATE POLICY "logos anon delete" ON storage.objects FOR DELETE TO anon USING (bucket_id = 'logos');
+
+-- PostgREST caches the schema it exposes; without this the API keeps answering
+-- "Could not find the table 'public.company_settings' in the schema cache" until
+-- its next automatic reload, even though the table exists.
+NOTIFY pgrst, 'reload schema';
+
 -- ==============================================================================
 -- Indexes for Performance
 -- ==============================================================================
@@ -182,6 +222,7 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
 -- Policies
@@ -195,7 +236,7 @@ ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 -- and it is gated by the shared secret in the API layer, not here.
 --
 -- One policy per table per command -- four per table, generated rather than
--- written out longhand because ten tables times four commands is forty
+-- written out longhand because eleven tables times four commands is forty-four
 -- statements to keep in step. Policy names are unique per table, so the three
 -- write policies cannot share one name; each carries its command:
 --
@@ -211,7 +252,8 @@ DO $policies$
 DECLARE
   all_tables text[] := ARRAY[
     'categories', 'suppliers', 'warehouses', 'departments',
-    'items', 'purchases', 'transactions', 'requests', 'audits', 'maintenance'
+    'items', 'purchases', 'transactions', 'requests', 'audits', 'maintenance',
+    'company_settings'
   ];
 
   t text;
@@ -290,6 +332,7 @@ REVOKE ALL ON public.transactions FROM anon;
 REVOKE ALL ON public.requests FROM anon;
 REVOKE ALL ON public.audits FROM anon;
 REVOKE ALL ON public.maintenance FROM anon;
+REVOKE ALL ON public.company_settings FROM anon;
 
 REVOKE ALL ON public.categories FROM authenticated;
 REVOKE ALL ON public.suppliers FROM authenticated;
@@ -301,6 +344,7 @@ REVOKE ALL ON public.transactions FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
 REVOKE ALL ON public.maintenance FROM authenticated;
+REVOKE ALL ON public.company_settings FROM authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
@@ -321,3 +365,6 @@ GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.transactions TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;
+-- company_settings is written only by the Settings screen upserting on id 1;
+-- nothing deletes the row, so DELETE is withheld like the four tables above.
+GRANT SELECT, INSERT, UPDATE ON public.company_settings TO anon;

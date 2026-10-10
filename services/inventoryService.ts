@@ -366,6 +366,61 @@ export async function deleteMaintenance(id: string, client?: Client) {
 }
 
 /**
+ * Fetch the single company/org configuration row (Settings). Returns null when
+ * supabase/seed.sql has not run yet.
+ */
+export async function getCompanySettings(client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('company_settings')
+    .select('*')
+    .eq('id', 1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Save the company/org configuration row. Upserts on id 1, so the first save
+ * creates the row and every subsequent save updates it.
+ */
+export async function saveCompanySettings(settings: Updates<'company_settings'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('company_settings')
+    .upsert({ id: 1, ...settings, updated_at: new Date().toISOString() })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Upload a logo into the public `logos` bucket and return its object path for
+ * `company_settings.logo_path`. Files are named by timestamp so a re-upload does
+ * not collide or linger in a browser cache.
+ */
+export async function uploadCompanyLogo(file: File, client?: Client) {
+  const supabase = getClient(client)
+  const extension = (file.name.match(/\.(\w+)$/)?.[1] ?? 'png').toLowerCase()
+  const path = `school-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+  const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
+  if (error) throw error
+  return path
+}
+
+/**
+ * Public URL for a logo object in the `logos` bucket. Cheap: getPublicUrl is
+ * pure URL construction and never makes a network request.
+ */
+export function companyLogoUrl(path: string | null): string | null {
+  if (!path) return null
+  return getClient().storage.from('logos').getPublicUrl(path).data.publicUrl
+}
+
+/**
  * Create a requisition request
  */
 export async function createRequest(request: Inserts<'requests'>, client?: Client) {

@@ -119,3 +119,7 @@ INSERT INTO public.maintenance (id, item_name, date, description, cost, status) 
 ('MNT-00005', 'Office Chair', '2026-09-18', 'Gas lift and casters repaired', 9.75, 'Completed')
 ON CONFLICT (id) DO NOTHING;
 
+-- Company Settings (single row; the Settings screen is the editor)
+INSERT INTO public.company_settings (id) VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+

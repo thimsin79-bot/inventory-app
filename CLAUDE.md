@@ -23,13 +23,15 @@ the Vercel Git integration.
 - Node v24.21.0, npm 11, path alias `@/*`
 - Supabase project `bktxzesvtmgcmznsfnlu` (`ap-southeast-2`).
   **`supabase/schema.sql` was last run in full on 2026-10-10** through the Management API (§9),
-  when the maintenance table joined. Verified live the same day: 40 policies across ten tables,
-  every one `TO anon`; `anon` has the grants the file declares (DELETE withheld on purchases,
-  transactions, requests and audits; DELETE held on items and maintenance); `authenticated` is
-  revoked from every table; a PostgREST probe with the publishable key returns rows.
+  when the company-settings table and the `logos` storage bucket joined. Verified live the same
+  day: 44 policies across eleven tables, every one `TO anon`; `anon` has the grants the file
+  declares (DELETE withheld on purchases, transactions, requests, audits and company_settings;
+  DELETE held on items and maintenance); `authenticated` is revoked from every table; the `logos`
+  bucket is public with read-all and anon upload policies; a PostgREST probe with the publishable
+  key returns rows.
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
   test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate`
-  (22 / 53 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
+  (22 / 57 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping, `check:rls` reads `supabase/schema.sql`, `check:gate` imports `lib/adminGate.ts` and
   reads the two Admin Console routes as source. Then `npm run lint`, `npx tsc --noEmit`,
   `npm run build`. The session-and-permission check (`check:auth`) was deleted with the auth layer.
@@ -43,7 +45,7 @@ app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
   (app)/                  the 11 app screens + shared sidebar shell
   maintenance/            Maintenance History log: create + delete
-  settings/               browser-only user preferences (theme, landing page, rows per page)
+  settings/               company info (DB-backed, logo upload) + browser-only preferences
   admin/layout.tsx        Admin Console shell: full-width main, "Back to the app" link
   admin/users/            the Admin Console page (moved here 2026-10-09)
   api/supabase-test/      connection diagnostic (public)
@@ -59,7 +61,7 @@ lib/adminAuth.ts          server-only Auth-user CRUD over the Management API (re
 lib/adminGate.ts          the Admin Console shared-secret gate: x-admin-secret vs ADMIN_CONSOLE_SECRET, 401/503
 services/inventoryService.ts   all data access, browser Supabase client
 services/adminUsersService.ts  Admin Console fetch layer over /api/admin/users (holds the secret per tab)
-supabase/schema.sql       tables + RLS: anon-only policies, generated in one DO block
+supabase/schema.sql       tables + RLS: anon-only policies, generated in one DO block; logos bucket
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
 utils/format.ts, utils/errors.ts  live helpers
@@ -85,10 +87,10 @@ shells; data arrives on the client), and the Admin Console `/admin/users` (own s
 
 The app has no sign-in. Read this before touching RLS or the Admin routes.
 
-- **Data is public by design.** RLS is enabled on all ten tables but every policy is
+- **Data is public by design.** RLS is enabled on all eleven tables but every policy is
   `TO anon USING (true)` / `WITH CHECK (true)`, and `anon` holds the grants the screens
-  issue (DELETE withheld on purchases, transactions, requests, audits; DELETE held on
-  items and maintenance). Anyone who can reach
+  issue (DELETE withheld on purchases, transactions, requests, audits, company_settings;
+  DELETE held on items and maintenance). Anyone who can reach
   PostgREST with the publishable key can read and write every row — that is this build's
   intended state: a school inventory tool with no accounts.
 - **The Admin Console is the one gated surface.** Both `/api/admin/users*` handlers call
@@ -121,13 +123,13 @@ Consequences, stated honestly:
 
 ## 4. Database
 
-Nine of the ten tables use `TEXT` primary keys with no default, so ids are generated in
+Nine of the eleven tables use `TEXT` primary keys with no default, so ids are generated in
 `services/inventoryService.ts:17` (`nextId(prefix, length)` → `TXN000123`, `PO-20260001`, `AUD00042`,
 `REQ00017`, `MNT00001`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
 
 Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
-transactions 7, requests 7, audits 5, maintenance 5.
+transactions 7, requests 7, audits 5, maintenance 5, company_settings 1.
 
 All reads and writes go through the **browser** Supabase client (`services/inventoryService.ts`)
 with the publishable key, which is exactly why the RLS policies target `anon`.
@@ -191,7 +193,9 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
   not manage paging state itself. The pager only appears when a table exceeds the page size.
 - Browser preferences live in `lib/preferences.ts` (types, storage, theme resolution) and are
   applied by `components/PreferencesProvider.tsx`, mounted once in the root layout. They never
-  touch the database; Settings is the only UI for them.
+  touch the database. Company information (name/address/contact/logo) is the one DB-backed part
+  of the Settings screen: it reads and upserts the single `company_settings` row and uploads the
+  logo to the public `logos` storage bucket. Nothing else displays it yet.
 - `lib/permissions.ts` keeps the `<screen>.view`/`<screen>.manage` catalog only for the Admin
   Console's `PermissionPicker`; it decides nothing at runtime.
 - Forms dispatch through the browser Supabase client in `services/inventoryService.ts`.
@@ -204,16 +208,16 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls + check:gate (22 / 53 / 22)
+npm run check          # check:env + check:rls + check:gate (22 / 57 / 22)
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-After touching `supabase/schema.sql`, `check:rls` matters most: all ten tables declared and
+After touching `supabase/schema.sql`, `check:rls` matters most: all eleven tables declared and
 RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies targeting `anon`
 and never `authenticated`, grants matching the policies, `authenticated` revoked everywhere,
-`DELETE` withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role
+`DELETE` withheld on the five tables nothing deletes from, no `current_role`/`app_metadata`/role
 arrays, and no `FOR ALL` catch-all. **It must fail loudly if you reintroduce a role ladder or
 widen RLS to a `authenticated` split** — a guard that cannot fail is not a guard, so prove a new
 assertion by breaking the code it covers first.

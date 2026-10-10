@@ -390,6 +390,36 @@ export interface Database {
         }
         Relationships: []
       }
+      company_settings: {
+        Row: {
+          id: number
+          name: string
+          address: string | null
+          phone: string | null
+          email: string | null
+          logo_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          name?: string
+          address?: string | null
+          phone?: string | null
+          email?: string | null
+          logo_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          name?: string
+          address?: string | null
+          phone?: string | null
+          email?: string | null
+          logo_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
