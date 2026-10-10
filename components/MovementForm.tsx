@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Tables, Inserts } from '@/types/database.types'
-import { Button, Input, Label, Select, Textarea } from './ui'
+import { Button, Field, Input, Label, Select, Textarea } from './ui'
 
 export const MOVEMENT_TYPES = ['Stock In', 'Stock Out', 'Transfer', 'Adjustment', 'Return Out'] as const
 export type MovementType = (typeof MOVEMENT_TYPES)[number]
@@ -47,28 +47,28 @@ export function MovementForm({
   const [warehouse, setWarehouse] = useState('')
   const [ref, setRef] = useState('')
   const [remark, setRemark] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [amountError, setAmountError] = useState<string | null>(null)
 
   function submit() {
     const n = Number(amount)
     const signed = SIGNED_TYPES.includes(type)
 
     if (!Number.isInteger(n)) {
-      setError('Enter a whole number.')
+      setAmountError('Enter a whole number.')
       return
     }
     if (signed ? n === 0 : n <= 0) {
-      setError(signed ? 'Adjustment cannot be zero.' : 'Enter a whole number greater than zero.')
+      setAmountError(signed ? 'Adjustment cannot be zero.' : 'Enter a whole number greater than zero.')
       return
     }
 
     const delta = movementDelta(type, n)
     if (item.qty + delta < 0) {
-      setError(`Only ${item.qty} in stock.`)
+      setAmountError(`Only ${item.qty} in stock.`)
       return
     }
 
-    setError(null)
+    setAmountError(null)
     onSubmit(
       {
         item_barcode: item.barcode,
@@ -92,8 +92,7 @@ export function MovementForm({
         </p>
       </div>
 
-      <div>
-        <Label htmlFor="mv-type">Type</Label>
+      <Field label="Type" htmlFor="mv-type" required>
         <Select id="mv-type" value={type} onChange={(e) => setType(e.target.value as MovementType)}>
           {MOVEMENT_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -101,15 +100,18 @@ export function MovementForm({
             </option>
           ))}
         </Select>
-      </div>
+      </Field>
 
-      <div>
-        <Label htmlFor="mv-amount">{SIGNED_TYPES.includes(type) ? 'Change (+/-)' : 'Quantity'}</Label>
+      <Field
+        label={SIGNED_TYPES.includes(type) ? 'Change (+/-)' : 'Quantity'}
+        htmlFor="mv-amount"
+        required
+        error={amountError ?? undefined}
+      >
         <Input id="mv-amount" type="number" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      </div>
+      </Field>
 
-      <div>
-        <Label htmlFor="mv-warehouse">Warehouse</Label>
+      <Field label="Warehouse" htmlFor="mv-warehouse">
         <Select id="mv-warehouse" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
           <option value="">— none —</option>
           {warehouses.map((w) => (
@@ -118,26 +120,22 @@ export function MovementForm({
             </option>
           ))}
         </Select>
-      </div>
+      </Field>
 
-      <div>
-        <Label htmlFor="mv-ref">Reference</Label>
+      <Field label="Reference" htmlFor="mv-ref">
         <Input id="mv-ref" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="PO-2026-014, ISS-0341…" />
-      </div>
+      </Field>
 
-      <div className="sm:col-span-2">
-        <Label htmlFor="mv-remark">Remark</Label>
+      <Field label="Remark" htmlFor="mv-remark" className="sm:col-span-2">
         <Textarea id="mv-remark" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Optional" />
-      </div>
+      </Field>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-2">{error}</p>}
-
-      <div className="flex justify-end gap-2 sm:col-span-2">
+      <div className="flex justify-end gap-2 border-t border-zinc-200 pt-3 sm:col-span-2 dark:border-zinc-800">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
         <Button type="button" variant="primary" onClick={submit} disabled={busy}>
-          {busy ? 'Recording…' : 'Record movement'}
+          {busy ? 'Saving…' : 'Record movement'}
         </Button>
       </div>
     </div>

@@ -8,10 +8,10 @@
  * the user can edit it themselves, so it cannot decide anything.
  *
  * `<screen>.view`   may open the screen.
- * `<screen>.manage` may create, edit and delete within it. The reference
- * screens (categories, suppliers, departments) are read-only in this app,
- * so they have no manage entry. Warehouses is counted as a data screen but
- * has no standalone page.
+ * `<screen>.manage` may create, edit and delete within it. Every screen with
+ * a write path has a manage entry, including categories, suppliers and
+ * departments. Warehouses is counted as a data screen but has no standalone
+ * page.
  */
 
 export const PERMISSION_GROUPS = [
@@ -40,6 +40,9 @@ export const PERMISSION_GROUPS = [
       { key: 'transactions.manage', label: 'Transactions' },
       { key: 'requests.manage', label: 'Requests' },
       { key: 'audits.manage', label: 'Audits' },
+      { key: 'categories.manage', label: 'Categories' },
+      { key: 'suppliers.manage', label: 'Suppliers' },
+      { key: 'departments.manage', label: 'Departments' },
       { key: 'admin.manage', label: 'Admin Console — create and edit users' },
     ],
   },

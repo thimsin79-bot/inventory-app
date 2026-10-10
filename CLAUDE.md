@@ -2,7 +2,7 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 9, 2026
+**Last Updated:** October 10, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
@@ -163,9 +163,12 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
    If it goes away, `lib/supabase/server.ts` has no other consumer and should go with it.
 7. `recordTransaction` in `inventoryService.ts` inserts the transaction and updates the item in two
    round-trips; wrap both in a Postgres RPC if atomicity matters.
-8. Reference screens (categories, suppliers, departments) are read-only. Only inventory,
-   purchases, requests and audits have write paths. Warehouses has no standalone page but is
-   still used as form data.
+8. **Closed 2026-10-10 — reference screens are no longer read-only.** Categories, suppliers and
+   departments now have create/edit/delete (service functions `createCategory`/`updateCategory`/
+   `deleteCategory`, likewise `createSupplier`/…, `createDepartment`/…), all generating TEXT ids
+   via `nextId`. Deleting a category or supplier that items/purchases still reference is blocked
+   by the FK and surfaces the Postgres error. Warehouses still has no standalone page but is used
+   as form data. All eleven tables now have write paths.
 9. **Closed 2026-10-08 — the Admin Console's production 502** was a BOM-prefixed
    `SUPABASE_ACCESS_TOKEN` in Vercel (U+FEFF at index 7 of `Bearer <token>`). Fixed by rewriting
    the variable and by `runSql` trimming the token. An env change only reaches the site on a new
@@ -182,9 +185,15 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
   class on `<html>` (Tailwind v4 `@custom-variant`), not the OS media query: the theme init script
   in the root layout and `preferences.theme` decide it. Keep that script and `resolveTheme` in
   `lib/preferences.ts` in sync.
-- Reuse `components/ui.tsx` (`Card`, `Button`, `Label`, `Input`, `Select`, `Textarea`, `Badge`,
-  `StatusBadge`, `PageHeader`, `Spinner`, `EmptyState`, `ErrorState`) rather than adding new
-  primitives.
+- Reuse `components/ui.tsx` (`Card`, `Button`, `Label`, `Input`, `Select`, `Textarea`, `Field`,
+  `Notice`, `Badge`, `StatusBadge`, `PageHeader`, `Spinner`, `EmptyState`, `ErrorState`) rather
+  than adding new primitives.
+- **Forms use `Field` and `Notice`.** `Field` wraps a label, required asterisk, control, hint and
+  the field's own validation error; `Notice` is the one success/`tone="bad"` banner (page-level in
+  the screen, and re-used at the top of a modal for submit/server errors). Validate per field and
+  show the error under the field inside the open modal — not in a banner behind it. Reset the form
+  when the modal opens, submit buttons read `Saving…` / `Deleting…` while busy, and raw `<select>`
+  filters use the `Select` primitive.
 - Client screens follow the `useAsyncData` + `AsyncBoundary` + `DataTable` pattern with
   `Column<T>[]`. There is no `ScreenGate`: a screen renders its content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.

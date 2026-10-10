@@ -88,6 +88,49 @@ export async function getCategories(client?: Client) {
 }
 
 /**
+ * Create a category. The id is generated here because the column has no default.
+ */
+export async function createCategory(category: Inserts<'categories'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ id: nextId('CAT', 4), ...category })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Update a category
+ */
+export async function updateCategory(id: string, updates: Updates<'categories'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('categories')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete a category. Fails if any inventory item still references it (FK), and
+ * that Postgres error is surfaced to the caller.
+ */
+export async function deleteCategory(id: string, client?: Client) {
+  const supabase = getClient(client)
+  const { error } = await supabase.from('categories').delete().eq('id', id)
+
+  if (error) throw error
+  return true
+}
+
+/**
  * Fetch all warehouses / store locations
  */
 export async function getWarehouses(client?: Client) {
@@ -113,6 +156,49 @@ export async function getSuppliers(client?: Client) {
 
   if (error) throw error
   return data
+}
+
+/**
+ * Create a supplier. The id is generated here because the column has no default.
+ */
+export async function createSupplier(supplier: Inserts<'suppliers'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('suppliers')
+    .insert({ id: nextId('SUP', 4), ...supplier })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Update a supplier
+ */
+export async function updateSupplier(id: string, updates: Updates<'suppliers'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('suppliers')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete a supplier. Fails if a purchase order or item still references it, and
+ * that Postgres error is surfaced to the caller.
+ */
+export async function deleteSupplier(id: string, client?: Client) {
+  const supabase = getClient(client)
+  const { error } = await supabase.from('suppliers').delete().eq('id', id)
+
+  if (error) throw error
+  return true
 }
 
 /**
@@ -242,6 +328,49 @@ export async function getDepartments(client?: Client) {
 
   if (error) throw error
   return data
+}
+
+/**
+ * Create a department. The id is generated here because the column has no default.
+ */
+export async function createDepartment(department: Inserts<'departments'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('departments')
+    .insert({ id: nextId('DEP', 4), ...department })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Update a department
+ */
+export async function updateDepartment(id: string, updates: Updates<'departments'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('departments')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete a department. Requests store the department by name, not id, so there is
+ * no foreign key to block this.
+ */
+export async function deleteDepartment(id: string, client?: Client) {
+  const supabase = getClient(client)
+  const { error } = await supabase.from('departments').delete().eq('id', id)
+
+  if (error) throw error
+  return true
 }
 
 /**

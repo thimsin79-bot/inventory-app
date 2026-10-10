@@ -4,20 +4,20 @@ import { useState } from 'react'
 import { getMaintenance, createMaintenance, deleteMaintenance } from '@/services/inventoryService'
 import type { Tables } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
-import { formatDate } from '@/utils/format'
+import { formatDate, formatMoney, today } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge, Textarea } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, StatusBadge, Textarea } from '@/components/ui'
 
 type Row = Tables<'maintenance'>
 
 const STATUSES = ['Completed', 'In Progress', 'Scheduled']
 
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
+const emptyForm = () => ({ item_name: '', date: today(), description: '', cost: '0', status: 'Completed' })
+
+type ErrorMap = Partial<Record<'item_name' | 'date' | 'cost', string>>
 
 export default function MaintenancePage() {
   const [busy, setBusy] = useState(false)
@@ -25,32 +25,32 @@ export default function MaintenancePage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Row | null>(null)
-  const [form, setForm] = useState({ item_name: '', date: today(), description: '', cost: '0', status: 'Completed' })
+  const [form, setForm] = useState(emptyForm)
+  const [formErrors, setFormErrors] = useState<ErrorMap>({})
+  const [formError, setFormError] = useState<string | null>(null)
 
   const state = useAsyncData(getMaintenance)
 
+  const set = (patch: Partial<ReturnType<typeof emptyForm>>) => setForm((f) => ({ ...f, ...patch }))
+
   function openCreate() {
-    setError(null)
-    setForm({ item_name: '', date: today(), description: '', cost: '0', status: 'Completed' })
+    setForm(emptyForm())
+    setFormErrors({})
+    setFormError(null)
     setCreating(true)
   }
 
   async function submit() {
     const cost = Number(form.cost)
-    if (!form.item_name.trim()) {
-      setError('Item name is required.')
-      return
-    }
-    if (!form.date) {
-      setError('A service date is required.')
-      return
-    }
-    if (!Number.isFinite(cost) || cost < 0) {
-      setError('Cost must be zero or a positive number.')
-      return
-    }
+    const errors: ErrorMap = {}
+    if (!form.item_name.trim()) errors.item_name = 'Item name is required.'
+    if (!form.date) errors.date = 'A service date is required.'
+    if (!Number.isFinite(cost) || cost < 0) errors.cost = 'Zero or a positive number.'
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setBusy(true)
-    setError(null)
+    setFormError(null)
     try {
       await createMaintenance({
         item_name: form.item_name.trim(),
@@ -63,7 +63,7 @@ export default function MaintenancePage() {
       setNotice('Maintenance record added')
       state.reload()
     } catch (e) {
-      setError(errorMessage(e))
+      setFormError(errorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -90,7 +90,7 @@ export default function MaintenancePage() {
     { key: 'date', header: 'Date', render: (r) => <span className="tabular-nums">{formatDate(r.date)}</span> },
     { key: 'item', header: 'Item', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.item_name}</span> },
     { key: 'description', header: 'Description', render: (r) => r.description ?? <span className="text-zinc-400">—</span> },
-    { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{Number(r.cost).toFixed(2)}</span> },
+    { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{formatMoney(r.cost)}</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     {
       key: 'actions',
@@ -116,8 +116,8 @@ export default function MaintenancePage() {
         }
       />
 
-      {notice && <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">{notice}</p>}
-      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
+      {notice && <Notice className="mb-3">{notice}</Notice>}
+      {error && <Notice tone="bad" className="mb-3">{error}</Notice>}
 
       <Card>
         <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
@@ -145,33 +145,29 @@ export default function MaintenancePage() {
           </>
         }
       >
+        {formError && <Notice tone="bad" className="mb-3">{formError}</Notice>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label htmlFor="mt-item">Item</Label>
-            <Input id="mt-item" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="mt-date">Date</Label>
-            <Input id="mt-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="mt-cost">Cost</Label>
-            <Input id="mt-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="mt-status">Status</Label>
-            <Select id="mt-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          <Field label="Item" htmlFor="mt-item" required error={formErrors.item_name} className="sm:col-span-2">
+            <Input id="mt-item" value={form.item_name} onChange={(e) => set({ item_name: e.target.value })} />
+          </Field>
+          <Field label="Date" htmlFor="mt-date" required error={formErrors.date}>
+            <Input id="mt-date" type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />
+          </Field>
+          <Field label="Cost" htmlFor="mt-cost" required error={formErrors.cost}>
+            <Input id="mt-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => set({ cost: e.target.value })} />
+          </Field>
+          <Field label="Status" htmlFor="mt-status">
+            <Select id="mt-status" value={form.status} onChange={(e) => set({ status: e.target.value })}>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </Select>
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="mt-desc">Description</Label>
-            <Textarea id="mt-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What was done…" />
-          </div>
+          </Field>
+          <Field label="Description" htmlFor="mt-desc" className="sm:col-span-2">
+            <Textarea id="mt-desc" value={form.description} onChange={(e) => set({ description: e.target.value })} placeholder="What was done…" />
+          </Field>
         </div>
       </Modal>
 

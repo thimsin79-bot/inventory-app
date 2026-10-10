@@ -21,8 +21,10 @@ import {
   Button,
   Card,
   EmptyState,
+  Field,
   Input,
   Label,
+  Notice,
   PageHeader,
 } from '@/components/ui'
 import type { PermissionKey } from '@/lib/permissions'
@@ -45,6 +47,7 @@ export default function AdminUsersPage() {
   const [permDraft, setPermDraft] = useState<PermissionKey[]>([])
   const [resettingPw, setResettingPw] = useState<AdminUser | null>(null)
   const [newPassword, setNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [banning, setBanning] = useState<AdminUser | null>(null)
   const [deleting, setDeleting] = useState<AdminUser | null>(null)
 
@@ -137,9 +140,10 @@ export default function AdminUsersPage() {
   async function submitPassword() {
     if (!resettingPw) return
     if (newPassword.length < 8 || newPassword.length > 256) {
-      setActionError('Password must be between 8 and 256 characters.')
+      setPasswordError('Password must be between 8 and 256 characters.')
       return
     }
+    setPasswordError(null)
     const ok = await run(
       () => updateAdminUser(resettingPw.id, { password: newPassword }),
       `Reset password for ${resettingPw.email}`,
@@ -214,6 +218,7 @@ export default function AdminUsersPage() {
           size="sm"
           onClick={() => {
             setNewPassword('')
+            setPasswordError(null)
             setActionError(null)
             setResettingPw(r)
           }}
@@ -274,11 +279,7 @@ export default function AdminUsersPage() {
                 server. It is kept for this tab only.
               </p>
             </div>
-            {!verifying && activeUnlockError && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-                {activeUnlockError}
-              </p>
-            )}
+            {!verifying && activeUnlockError && <Notice tone="bad">{activeUnlockError}</Notice>}
             <Button variant="primary" onClick={submitUnlock} disabled={verifying}>
               {verifying ? 'Checking…' : 'Unlock'}
             </Button>
@@ -286,16 +287,8 @@ export default function AdminUsersPage() {
         </Card>
       ) : (
         <>
-          {notice && (
-            <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-              {notice}
-            </p>
-          )}
-          {actionError && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-              {actionError}
-            </p>
-          )}
+          {notice && <Notice className="mb-3">{notice}</Notice>}
+          {actionError && <Notice tone="bad" className="mb-3">{actionError}</Notice>}
 
           <Card>
             <AsyncBoundary
@@ -330,14 +323,13 @@ export default function AdminUsersPage() {
               Cancel
             </Button>
             <Button variant="primary" onClick={submitCreate} disabled={busy}>
-              {busy ? 'Creating…' : 'Create user'}
+              {busy ? 'Saving…' : 'Create user'}
             </Button>
           </>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="new-user-email">Email</Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Email" htmlFor="new-user-email" required error={createErrors.email}>
             <Input
               id="new-user-email"
               type="email"
@@ -345,12 +337,8 @@ export default function AdminUsersPage() {
               onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
               placeholder="name@example.com"
             />
-            {createErrors.email && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{createErrors.email}</p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="new-user-password">Password</Label>
+          </Field>
+          <Field label="Password" htmlFor="new-user-password" required error={createErrors.password}>
             <Input
               id="new-user-password"
               type="password"
@@ -358,13 +346,8 @@ export default function AdminUsersPage() {
               onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
               placeholder="At least 8 characters"
             />
-            {createErrors.password && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                {createErrors.password}
-              </p>
-            )}
-          </div>
-          <div>
+          </Field>
+          <div className="sm:col-span-2">
             <Label>Permissions</Label>
             <PermissionPicker
               selected={createForm.permissions}
@@ -407,8 +390,7 @@ export default function AdminUsersPage() {
           </>
         }
       >
-        <div>
-          <Label htmlFor="reset-password">New password</Label>
+        <Field label="New password" htmlFor="reset-password" required error={passwordError ?? undefined}>
           <Input
             id="reset-password"
             type="password"
@@ -416,7 +398,7 @@ export default function AdminUsersPage() {
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="At least 8 characters"
           />
-        </div>
+        </Field>
       </Modal>
 
       <Modal
@@ -428,7 +410,11 @@ export default function AdminUsersPage() {
             <Button variant="secondary" onClick={() => setBanning(null)} disabled={busy}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={submitBan} disabled={busy}>
+            <Button
+              variant={banning && isBanned(banning) ? 'secondary' : 'danger'}
+              onClick={submitBan}
+              disabled={busy}
+            >
               {busy ? 'Saving…' : banning && isBanned(banning) ? 'Unban' : 'Ban user'}
             </Button>
           </>

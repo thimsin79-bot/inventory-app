@@ -63,6 +63,72 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
   return <textarea {...props} className={`${fieldBase} min-h-[72px] ${className}`} />
 }
 
+/**
+ * One field in a form: label, optional required marker, the control, an optional
+ * hint, and the field's validation error. Every form in the app wraps its inputs
+ * in this so validation reads the same everywhere — under the field, inside the
+ * open modal, rather than in a banner behind it.
+ */
+export function Field({
+  label,
+  htmlFor,
+  required,
+  hint,
+  error,
+  className = '',
+  children,
+}: {
+  label: string
+  htmlFor?: string
+  required?: boolean
+  hint?: string
+  error?: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={className}>
+      <Label htmlFor={htmlFor}>
+        {label}
+        {required && (
+          <span className="text-red-600 dark:text-red-400" aria-hidden="true">
+            {' '}
+            *
+          </span>
+        )}
+      </Label>
+      {children}
+      {error ? (
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+      ) : (
+        hint && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Inline feedback banner. `good` for success (insert/update/delete notices),
+ * `bad` for submit and action errors. Replaces the copy-pasted emerald/red
+ * paragraphs each screen used to carry.
+ */
+export function Notice({
+  tone = 'good',
+  className = '',
+  children,
+}: {
+  tone?: 'good' | 'bad'
+  className?: string
+  children: ReactNode
+}) {
+  const tones = {
+    good: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
+    bad: 'bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300',
+  }[tone]
+
+  return <p className={`rounded-md px-3 py-2 text-sm ${tones} ${className}`}>{children}</p>
+}
+
 export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' }) {
   const tones = {
     neutral: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',

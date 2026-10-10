@@ -8,11 +8,14 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { usePreferences } from '@/components/PreferencesProvider'
 import { LANDING_OPTIONS, PAGE_SIZE_OPTIONS, type ThemePreference } from '@/lib/preferences'
-import { Button, Card, Input, Label, PageHeader, Select, Textarea } from '@/components/ui'
+import { Button, Card, Field, Input, Label, Notice, PageHeader, Select, Textarea } from '@/components/ui'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 type CompanyRow = Tables<'company_settings'>
+
+type ErrorMap = Partial<Record<'name' | 'email', string>>
 
 function CompanyEditor({ initial, onSaved }: { initial: CompanyRow | null; onSaved: () => void }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -23,6 +26,7 @@ function CompanyEditor({ initial, onSaved }: { initial: CompanyRow | null; onSav
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<ErrorMap>({})
   const [notice, setNotice] = useState<string | null>(null)
 
   const preview = useMemo(
@@ -35,6 +39,12 @@ function CompanyEditor({ initial, onSaved }: { initial: CompanyRow | null; onSav
       setError('Logo must be an image under 5 MB.')
       return
     }
+    const errors: ErrorMap = {}
+    if (!name.trim()) errors.name = 'Company name is required.'
+    if (email.trim() && !EMAIL.test(email.trim())) errors.email = 'Enter a valid email address.'
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setBusy(true)
     setError(null)
     setNotice(null)
@@ -59,64 +69,66 @@ function CompanyEditor({ initial, onSaved }: { initial: CompanyRow | null; onSav
   }
 
   return (
-    <Card className="p-4">
-      <p className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-100">Company information</p>
-      <p className="-mt-2 mb-4 text-xs text-zinc-500 dark:text-zinc-400">
-        Stored app-wide in the database, so every device sees the same details.
-      </p>
+    <Card>
+      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Company information</p>
+        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          Stored app-wide in the database, so every device sees the same details.
+        </p>
+      </div>
 
-      {notice && <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">{notice}</p>}
-      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
+      <div className="space-y-3 p-4">
+        {notice && <Notice>{notice}</Notice>}
+        {error && <Notice tone="bad">{error}</Notice>}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <Label htmlFor="co-name">Company name</Label>
-          <Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label htmlFor="co-logo">Logo</Label>
-          <div className="flex flex-wrap items-center gap-3">
-            {preview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preview} alt="Company logo preview" className="h-16 w-16 rounded-md border border-zinc-200 object-contain dark:border-zinc-700" />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-zinc-300 text-xs text-zinc-400 dark:border-zinc-700">
-                none
-              </div>
-            )}
-            <div className="flex flex-col gap-1.5">
-              <Input id="co-logo" type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
-              <div className="flex gap-2">
-                <Button size="sm" variant="primary" onClick={save} disabled={busy}>
-                  {busy ? 'Saving…' : 'Save changes'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={busy || (!logoFile && !logoPath)}
-                  onClick={() => {
-                    setLogoFile(null)
-                    setLogoPath(null)
-                  }}
-                >
-                  Remove logo
-                </Button>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Company name" htmlFor="co-name" required error={formErrors.name} className="sm:col-span-2">
+            <Input id="co-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Logo" htmlFor="co-logo" className="sm:col-span-2">
+            <div className="flex flex-wrap items-center gap-3">
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="Company logo preview" className="h-16 w-16 rounded-md border border-zinc-200 object-contain dark:border-zinc-700" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-zinc-300 text-xs text-zinc-400 dark:border-zinc-700">
+                  none
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <Input id="co-logo" type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy || (!logoFile && !logoPath)}
+                    onClick={() => {
+                      setLogoFile(null)
+                      setLogoPath(null)
+                    }}
+                  >
+                    Remove logo
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          </Field>
+          <Field label="Address" htmlFor="co-address" className="sm:col-span-2">
+            <Textarea id="co-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
+          <Field label="Phone" htmlFor="co-phone">
+            <Input id="co-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <Field label="Email" htmlFor="co-email" error={formErrors.email}>
+            <Input id="co-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
         </div>
-        <div className="sm:col-span-2">
-          <Label htmlFor="co-address">Address</Label>
-          <Textarea id="co-address" value={address} onChange={(e) => setAddress(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="co-phone">Phone</Label>
-          <Input id="co-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="co-email">Email</Label>
-          <Input id="co-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <Button variant="primary" onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
       </div>
     </Card>
   )

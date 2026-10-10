@@ -18,7 +18,7 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Input, PageHeader, StatusBadge, Badge } from '@/components/ui'
+import { Button, Card, EmptyState, Input, Notice, PageHeader, Select, StatusBadge, Badge } from '@/components/ui'
 import {
   EMPTY_ITEM,
   ItemFormFields,
@@ -182,11 +182,11 @@ export default function InventoryPage() {
               className="w-56"
               aria-label="Search items"
             />
-            <select
+            <Select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               aria-label="Filter by category"
-              className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              className="w-44"
             >
               <option value="all">All categories</option>
               {categoriesData.map((c) => (
@@ -194,7 +194,7 @@ export default function InventoryPage() {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button variant="primary" onClick={openCreate}>
               New item
             </Button>
@@ -202,16 +202,8 @@ export default function InventoryPage() {
         }
       />
 
-      {notice && (
-        <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-          {notice}
-        </p>
-      )}
-      {actionError && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-          {actionError}
-        </p>
-      )}
+      {notice && <Notice className="mb-3">{notice}</Notice>}
+      {actionError && <Notice tone="bad" className="mb-3">{actionError}</Notice>}
       {lowStock.length > 0 && (
         <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">
           <Badge tone="warn">{lowStock.length}</Badge> <span className="ml-1">at or below minimum quantity</span>

@@ -7,7 +7,7 @@ import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
-import { Badge, Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
+import { Badge, Card, EmptyState, PageHeader, Select, StatusBadge } from '@/components/ui'
 import { MOVEMENT_TYPES } from '@/components/MovementForm'
 
 type Row = Tables<'transactions'>
@@ -49,19 +49,14 @@ export default function TransactionsPage() {
         title="Transactions"
         description="Stock movements recorded from the inventory screen."
         actions={
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            aria-label="Filter by movement type"
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
+          <Select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by movement type" className="w-44">
             <option value="all">All types</option>
             {MOVEMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
         }
       />
       <Card>

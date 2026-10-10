@@ -1,7 +1,7 @@
 'use client'
 
 import type { Tables, Inserts } from '@/types/database.types'
-import { Input, Label, Select, Textarea } from './ui'
+import { Field, Input, Select, Textarea } from './ui'
 
 export type ItemFormState = {
   name: string
@@ -110,10 +110,10 @@ export function ItemFormFields({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Item Name" error={errors.name} id="item-name">
+      <Field label="Item Name" error={errors.name} htmlFor="item-name" required>
         <Input id="item-name" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Whiteboard Marker" />
       </Field>
-      <Field label="Category" id="item-category">
+      <Field label="Category" htmlFor="item-category">
         <Select id="item-category" value={form.category_id} onChange={(e) => set('category_id', e.target.value)}>
           <option value="">— none —</option>
           {categories.map((c) => (
@@ -123,13 +123,13 @@ export function ItemFormFields({
           ))}
         </Select>
       </Field>
-      <Field label="Brand" id="item-brand">
+      <Field label="Brand" htmlFor="item-brand">
         <Input id="item-brand" value={form.brand} onChange={(e) => set('brand', e.target.value)} placeholder="Optional" />
       </Field>
-      <Field label="Model" id="item-model">
+      <Field label="Model" htmlFor="item-model">
         <Input id="item-model" value={form.model} onChange={(e) => set('model', e.target.value)} placeholder="Optional" />
       </Field>
-      <Field label="Description" id="item-description">
+      <Field label="Description" htmlFor="item-description">
         <Textarea
           id="item-description"
           value={form.description}
@@ -137,16 +137,16 @@ export function ItemFormFields({
           placeholder="What this item is"
         />
       </Field>
-      <Field label="Serial Number" id="item-serial">
+      <Field label="Serial Number" htmlFor="item-serial">
         <Input id="item-serial" value={form.serial_number} onChange={(e) => set('serial_number', e.target.value)} placeholder="Optional" />
       </Field>
-      <Field label="Quantity" error={errors.qty} id="item-qty">
+      <Field label="Quantity" error={errors.qty} htmlFor="item-qty" required>
         <Input id="item-qty" type="number" step="1" min="0" value={form.qty} onChange={(e) => set('qty', e.target.value)} />
       </Field>
-      <Field label="Unit Price" error={errors.price} id="item-price">
+      <Field label="Unit Price" error={errors.price} htmlFor="item-price" required>
         <Input id="item-price" type="number" step="0.01" min="0" value={form.price} onChange={(e) => set('price', e.target.value)} />
       </Field>
-      <Field label="Date of Purchase" id="item-purchase-date">
+      <Field label="Date of Purchase" htmlFor="item-purchase-date">
         <Input
           id="item-purchase-date"
           type="date"
@@ -154,7 +154,7 @@ export function ItemFormFields({
           onChange={(e) => set('purchase_date', e.target.value)}
         />
       </Field>
-      <Field label="Supplier" id="item-supplier">
+      <Field label="Supplier" htmlFor="item-supplier">
         <Select id="item-supplier" value={form.supplier_id} onChange={(e) => set('supplier_id', e.target.value)}>
           <option value="">— none —</option>
           {suppliers.map((s) => (
@@ -164,7 +164,7 @@ export function ItemFormFields({
           ))}
         </Select>
       </Field>
-      <Field label="Department / Location" id="item-department">
+      <Field label="Department / Location" htmlFor="item-department">
         <Input
           id="item-department"
           value={form.department_location}
@@ -172,7 +172,7 @@ export function ItemFormFields({
           placeholder="e.g. Grade 10 Office"
         />
       </Field>
-      <Field label="User Remark" id="item-remark">
+      <Field label="User Remark" htmlFor="item-remark">
         <Textarea
           id="item-remark"
           value={form.remark}
@@ -180,26 +180,6 @@ export function ItemFormFields({
           placeholder="Notes from whoever entered or checked this item"
         />
       </Field>
-    </div>
-  )
-}
-
-function Field({
-  label,
-  error,
-  id,
-  children,
-}: {
-  label: string
-  error?: string
-  id: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   )
 }

@@ -9,31 +9,49 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Input, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, StatusBadge } from '@/components/ui'
 
 type Row = Tables<'audits'>
 
+const EMPTY_AUDIT = { warehouse: '', item_name: '', system_qty: '0', physical_qty: '0' }
+
+type ErrorMap = Partial<Record<'warehouse' | 'item_name' | 'system_qty' | 'physical_qty', string>>
+
 export default function AuditsPage() {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ warehouse: '', item_name: '', system_qty: '0', physical_qty: '0' })
+  const [form, setForm] = useState(EMPTY_AUDIT)
+  const [formErrors, setFormErrors] = useState<ErrorMap>({})
+  const [formError, setFormError] = useState<string | null>(null)
 
   const state = useAsyncData(getAudits)
   const warehouses = useAsyncData(getWarehouses)
 
+  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
+
   const varianceOf = (r: Row) => r.physical_qty - r.system_qty
+
+  function openCreate() {
+    setForm(EMPTY_AUDIT)
+    setFormErrors({})
+    setFormError(null)
+    setCreating(true)
+  }
 
   async function submit() {
     const system = Number(form.system_qty)
     const physical = Number(form.physical_qty)
-    if (!form.warehouse || !form.item_name.trim() || !Number.isInteger(system) || !Number.isInteger(physical)) {
-      setError('Warehouse, item and whole-number quantities are all required.')
-      return
-    }
+    const errors: ErrorMap = {}
+    if (!form.warehouse) errors.warehouse = 'Choose a warehouse.'
+    if (!form.item_name.trim()) errors.item_name = 'Item is required.'
+    if (!Number.isInteger(system) || system < 0) errors.system_qty = 'Whole number ≥ 0.'
+    if (!Number.isInteger(physical) || physical < 0) errors.physical_qty = 'Whole number ≥ 0.'
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setBusy(true)
-    setError(null)
+    setFormError(null)
     try {
       await createAudit({
         warehouse: form.warehouse,
@@ -42,11 +60,10 @@ export default function AuditsPage() {
         physical_qty: physical,
       })
       setCreating(false)
-      setForm({ warehouse: '', item_name: '', system_qty: '0', physical_qty: '0' })
       setNotice('Audit recorded')
       state.reload()
     } catch (e) {
-      setError(errorMessage(e))
+      setFormError(errorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -80,14 +97,13 @@ export default function AuditsPage() {
         title="Audits"
         description="Physical stock counts compared against system quantity."
         actions={
-          <Button variant="primary" onClick={() => { setError(null); setCreating(true) }}>
+          <Button variant="primary" onClick={openCreate}>
             New audit
           </Button>
         }
       />
 
-      {notice && <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">{notice}</p>}
-      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
+      {notice && <Notice className="mb-3">{notice}</Notice>}
 
       <Card>
         <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
@@ -115,10 +131,10 @@ export default function AuditsPage() {
           </>
         }
       >
+        {formError && <Notice tone="bad" className="mb-3">{formError}</Notice>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="au-wh">Warehouse</Label>
-            <Select id="au-wh" value={form.warehouse} onChange={(e) => setForm({ ...form, warehouse: e.target.value })}>
+          <Field label="Warehouse" htmlFor="au-wh" required error={formErrors.warehouse}>
+            <Select id="au-wh" value={form.warehouse} onChange={(e) => set({ warehouse: e.target.value })}>
               <option value="">— select —</option>
               {(warehouses.data ?? []).map((w) => (
                 <option key={w.id} value={w.name}>
@@ -126,19 +142,16 @@ export default function AuditsPage() {
                 </option>
               ))}
             </Select>
-          </div>
-          <div>
-            <Label htmlFor="au-item">Item</Label>
-            <Input id="au-item" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="au-sys">System qty</Label>
-            <Input id="au-sys" type="number" step="1" value={form.system_qty} onChange={(e) => setForm({ ...form, system_qty: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="au-phy">Physical qty</Label>
-            <Input id="au-phy" type="number" step="1" value={form.physical_qty} onChange={(e) => setForm({ ...form, physical_qty: e.target.value })} />
-          </div>
+          </Field>
+          <Field label="Item" htmlFor="au-item" required error={formErrors.item_name}>
+            <Input id="au-item" value={form.item_name} onChange={(e) => set({ item_name: e.target.value })} />
+          </Field>
+          <Field label="System qty" htmlFor="au-sys" required error={formErrors.system_qty}>
+            <Input id="au-sys" type="number" min="0" step="1" value={form.system_qty} onChange={(e) => set({ system_qty: e.target.value })} />
+          </Field>
+          <Field label="Physical qty" htmlFor="au-phy" required error={formErrors.physical_qty}>
+            <Input id="au-phy" type="number" min="0" step="1" value={form.physical_qty} onChange={(e) => set({ physical_qty: e.target.value })} />
+          </Field>
         </div>
       </Modal>
     </>
