@@ -23,15 +23,17 @@ the Vercel Git integration.
 - Node v24.21.0, npm 11, path alias `@/*`
 - Supabase project `bktxzesvtmgcmznsfnlu` (`ap-southeast-2`).
   **`supabase/schema.sql` was last run in full on 2026-10-10** through the Management API (§9),
-  when the company-settings table and the `logos` storage bucket joined. Verified live the same
-  day: 44 policies across eleven tables, every one `TO anon`; `anon` has the grants the file
-  declares (DELETE withheld on purchases, transactions, requests, audits and company_settings;
-  DELETE held on items and maintenance); `authenticated` is revoked from every table; the `logos`
+  when the company-settings table and the `logos` storage bucket joined, and re-run the same day
+  when the transactions module was removed (table dropped, then the file applied). Verified live:
+  40 policies across ten tables, every one `TO anon`; `anon` has the grants the file
+  declares (DELETE withheld on purchases, requests, audits and company_settings; DELETE held on the
+  six screens that delete — items, maintenance, categories, suppliers, departments, warehouses);
+  `authenticated` is revoked from every table; the `logos`
   bucket is public with read-all and anon upload policies; a PostgREST probe with the publishable
   key returns rows.
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
   test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate`
-  (22 / 57 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
+  (22 / 53 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping, `check:rls` reads `supabase/schema.sql`, `check:gate` imports `lib/adminGate.ts` and
   reads the two Admin Console routes as source. Then `npm run lint`, `npx tsc --noEmit`,
   `npm run build`. The session-and-permission check (`check:auth`) was deleted with the auth layer.
@@ -43,9 +45,9 @@ the Vercel Git integration.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
-  (app)/                  the 12 app screens + shared sidebar shell
+  (app)/                  the 11 app screens + shared sidebar shell
   maintenance/            Maintenance History log: create + delete
-  reports/                read-only rollups: valuation, purchases, movements, requests, maintenance
+  reports/                read-only rollups: valuation, purchases, requests, maintenance
   settings/               company info (DB-backed, logo upload) + browser-only preferences
   admin/layout.tsx        Admin Console shell: full-width main, "Back to the app" link
   admin/users/            the Admin Console page (moved here 2026-10-09)
@@ -77,10 +79,10 @@ the root `proxy.ts`, `lib/{auth.ts,permissionGate.ts}`, `lib/supabase/session.ts
 `getWarehouses()` service call survive — the inventory movement form and the audits screen still
 read the table).
 
-**Screens:** `/`, `/inventory`, `/purchases`, `/transactions`, `/requests`, `/audits`,
+**Screens:** `/`, `/inventory`, `/purchases`, `/requests`, `/audits`,
 `/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered
 static shells; data arrives on the client), and the Admin Console `/admin/users` (own shell,
-top-level). `/sign-in`, `/sign-up` and `/warehouses` 404.
+top-level). `/sign-in`, `/sign-up`, `/warehouses` and `/transactions` 404.
 
 ---
 
@@ -88,9 +90,9 @@ top-level). `/sign-in`, `/sign-up` and `/warehouses` 404.
 
 The app has no sign-in. Read this before touching RLS or the Admin routes.
 
-- **Data is public by design.** RLS is enabled on all eleven tables but every policy is
+- **Data is public by design.** RLS is enabled on all ten tables but every policy is
   `TO anon USING (true)` / `WITH CHECK (true)`, and `anon` holds the grants the screens
-  issue (DELETE withheld on purchases, transactions, requests, audits, company_settings;
+  issue (DELETE withheld on purchases, requests, audits, company_settings;
   DELETE held on items and maintenance). Anyone who can reach
   PostgREST with the publishable key can read and write every row — that is this build's
   intended state: a school inventory tool with no accounts.
@@ -124,15 +126,15 @@ Consequences, stated honestly:
 
 ## 4. Database
 
-Nine of the eleven tables use `TEXT` primary keys with no default, so ids are generated in
-`services/inventoryService.ts:17` (`nextId(prefix, length)` → `TXN000123`, `PO-20260001`, `AUD00042`,
+Eight of the ten tables use `TEXT` primary keys with no default, so ids are generated in
+`services/inventoryService.ts:17` (`nextId(prefix, length)` → `PO-20260001`, `AUD00042`,
 `REQ00017`, `MNT00001`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
 
 Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
-transactions 7, requests 7, audits 5, maintenance 5, company_settings 1.
+requests 7, audits 5, maintenance 5, company_settings 1.
 
-The live project holds none of those rows as of 2026-10-10: `npm run smoke` cleared all ten data
+The live project holds none of those rows as of 2026-10-10: `npm run smoke` cleared all nine data
 tables (77 rows at the time) and kept only the `company_settings` row. Re-run
 `supabase/seed.sql` to bring the sample data back.
 
@@ -165,14 +167,18 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
    `check:gate` asserts exactly that ordering.
 6. **`/api/supabase-test` is still a diagnostic with no caller** — worth shrinking or deleting.
    If it goes away, `lib/supabase/server.ts` has no other consumer and should go with it.
-7. `recordTransaction` in `inventoryService.ts` inserts the transaction and updates the item in two
-   round-trips; wrap both in a Postgres RPC if atomicity matters.
+7. **Closed 2026-10-10 — the transactions module was removed.** Screen, nav link, landing option,
+   `transactions` table, RLS/grants, seed rows, `getTransactions`/`recordTransaction` and the
+   "Stock movements by type" report are all gone; the live table is dropped. The Inventory screen's
+   Move button now just changes `items.qty` in a single `updateItem` call (the form in
+   `components/MovementForm.tsx`, delta from `movementDelta`), so the old two-round-trip
+   atomicity concern no longer applies.
 8. **Closed 2026-10-10 — reference screens are no longer read-only.** Categories, suppliers and
    departments now have create/edit/delete (service functions `createCategory`/`updateCategory`/
    `deleteCategory`, likewise `createSupplier`/…, `createDepartment`/…), all generating TEXT ids
    via `nextId`. Deleting a category or supplier that items/purchases still reference is blocked
    by the FK and surfaces the Postgres error. Warehouses still has no standalone page but is used
-   as form data. All eleven tables now have write paths.
+   as form data. All ten tables now have write paths.
 9. **Closed 2026-10-08 — the Admin Console's production 502** was a BOM-prefixed
    `SUPABASE_ACCESS_TOKEN` in Vercel (U+FEFF at index 7 of `Bearer <token>`). Fixed by rewriting
    the variable and by `runSql` trimming the token. An env change only reaches the site on a new
@@ -228,10 +234,10 @@ npx tsc --noEmit
 npm run build
 ```
 
-After touching `supabase/schema.sql`, `check:rls` matters most: all eleven tables declared and
+After touching `supabase/schema.sql`, `check:rls` matters most: all ten tables declared and
 RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies targeting `anon`
 and never `authenticated`, grants matching the policies, `authenticated` revoked everywhere,
-`DELETE` withheld on the five tables nothing deletes from, no `current_role`/`app_metadata`/role
+`DELETE` withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role
 arrays, and no `FOR ALL` catch-all. **It must fail loudly if you reintroduce a role ladder or
 widen RLS to a `authenticated` split** — a guard that cannot fail is not a guard, so prove a new
 assertion by breaking the code it covers first.
@@ -243,11 +249,11 @@ outside `lib/adminGate.ts` reads `ADMIN_CONSOLE_SECRET`, and no `permissionCheck
 the ordering assertions.
 
 `npm run smoke` (`scripts/smoke-forms.mjs`) is the live counterpart and it is **destructive**: it
-truncates the ten data tables, then for every screen creates, reads back and edits one row through
+truncates the nine data tables, then for every screen creates, reads back and edits one row through
 the publishable key using the exact payload that screen's form submits, checks the column defaults
 the forms rely on (`unit`, `status`, `cost`, `min_qty`), checks the DELETE split — withheld on
-`purchases`, `transactions`, `requests`, `audits` and `company_settings` — writes the Settings row
-back with its own values, and truncates again so the run leaves nothing behind. 83 assertions, all
+`purchases`, `requests`, `audits` and `company_settings` — writes the Settings row
+back with its own values, and truncates again so the run leaves nothing behind. 76 assertions, all
 green on 2026-10-10. It reads `.env.local` (`SUPABASE_ACCESS_TOKEN`) and is deliberately **not** in
 `npm run check`: never wire a truncating script into the check suite. Restore data with
 `supabase/seed.sql`.

@@ -15,7 +15,6 @@ export const LANDING_OPTIONS: { value: string; label: string }[] = [
   { value: '/', label: 'Dashboard' },
   { value: '/inventory', label: 'Inventory' },
   { value: '/purchases', label: 'Purchases' },
-  { value: '/transactions', label: 'Transactions' },
   { value: '/requests', label: 'Requests' },
   { value: '/audits', label: 'Audits' },
   { value: '/maintenance', label: 'Maintenance History' },

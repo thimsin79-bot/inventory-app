@@ -43,7 +43,7 @@ This application has **no authentication, no sessions, no roles and no server-si
 holds one credential — the publishable key — and every request it makes reaches PostgREST as the
 `anon` role.
 
-`supabase/schema.sql` grants `anon` full read and write on all eleven tables. **Those policies are
+`supabase/schema.sql` grants `anon` full read and write on all ten tables. **Those policies are
 not a security boundary.** They exist so the app functions. Anyone who reaches the Supabase
 project directly can read and write everything, because the key is public by design.
 
@@ -54,12 +54,12 @@ which 302s anonymous traffic to Vercel SSO:
 - if anyone turns it **off** to share a link, the inventory becomes world-writable at that URL,
   and the Supabase project is reachable directly with the public key
 
-There is no per-user identity, so `transactions.created_by` and `requests.requested_by` are free
-text the UI types in — nothing validates or attributes them.
+There is no per-user identity, so `requests.requested_by` and the other free-text fields are text
+the UI types in — nothing validates or attributes them.
 
 Two limits do survive in the schema:
 
-- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests` and `audits`,
+- `DELETE` is withheld at the grant on `purchases`, `requests`, `audits` and `company_settings`,
   because no screen deletes them. `items` and the reference tables keep it.
 - `authenticated` is revoked on every table, so an account left over from before is not a way in.
 

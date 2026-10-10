@@ -28,14 +28,6 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
     </>
   ),
-  transactions: (
-    <>
-      <path d="M8 3 4 7l4 4" />
-      <path d="M4 7h16" />
-      <path d="m16 21 4-4-4-4" />
-      <path d="M20 17H4" />
-    </>
-  ),
   requests: (
     <>
       <rect width="8" height="4" x="8" y="2" rx="1" />
@@ -105,7 +97,6 @@ const LINKS: { href: string; label: string; icon: keyof typeof ICONS }[] = [
   { href: '/', label: 'Dashboard', icon: 'dashboard' },
   { href: '/inventory', label: 'Inventory', icon: 'inventory' },
   { href: '/purchases', label: 'Purchases', icon: 'purchases' },
-  { href: '/transactions', label: 'Transactions', icon: 'transactions' },
   { href: '/requests', label: 'Requests', icon: 'requests' },
   { href: '/audits', label: 'Audits', icon: 'audits' },
   { href: '/maintenance', label: 'Maintenance', icon: 'maintenance' },

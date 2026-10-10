@@ -9,7 +9,7 @@ function getClient(client?: Client): Client {
 }
 
 /**
- * `transactions`, `requests`, `audits` and `purchases` all use a TEXT primary
+ * `requests`, `audits` and `purchases` all use a TEXT primary
  * key with no column default (only `items.id` has one), so an id has to be
  * supplied on insert. Generating it here keeps the format in one place instead
  * of every caller inventing its own.
@@ -203,21 +203,6 @@ export async function deleteSupplier(id: string, client?: Client) {
 }
 
 /**
- * Fetch recent inventory transactions
- */
-export async function getTransactions(client?: Client, limit = 50) {
-  const supabase = getClient(client)
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .order('date', { ascending: false })
-    .limit(limit)
-
-  if (error) throw error
-  return data
-}
-
-/**
  * Fetch requisitions / requests
  */
 export async function getRequests(client?: Client) {
@@ -300,21 +285,6 @@ export async function deleteItem(id: string, client?: Client) {
 
   if (error) throw error
   return true
-}
-
-/**
- * Record a stock transaction
- */
-export async function recordTransaction(transaction: Inserts<'transactions'>, client?: Client) {
-  const supabase = getClient(client)
-  const { data, error } = await supabase
-    .from('transactions')
-    .insert({ id: nextId('TXN', 6), ...transaction })
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
 }
 
 /**

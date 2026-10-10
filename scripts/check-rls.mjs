@@ -13,13 +13,14 @@
  *
  * So it checks that:
  *
- *   - all eleven tables are declared and all eleven have RLS enabled
+ *   - all ten tables are declared and all ten have RLS enabled
  *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
  *   - the policies target `anon` and never `authenticated`
  *   - `anon` is granted the same commands the policies cover
  *   - `authenticated` is granted nothing and revoked from every table
  *   - `anon` is revoked first so the grants are the whole truth
- *   - DELETE stays withheld on the four tables no screen can delete from
+ *   - DELETE stays withheld on the three tables no screen can delete from
+ *     plus company_settings (four total)
  *   - nothing from the removed role ladder survives (current_role, app_metadata)
  *   - no table is left readable through a `FOR ALL USING (true)` catch-all
  *
@@ -90,7 +91,6 @@ const TABLES = [
   'departments',
   'items',
   'purchases',
-  'transactions',
   'requests',
   'audits',
   'maintenance',
@@ -98,7 +98,7 @@ const TABLES = [
 ]
 
 /** Tables no screen deletes from, so DELETE is withheld at the grant. */
-const NO_DELETE = ['purchases', 'transactions', 'requests', 'audits', 'company_settings']
+const NO_DELETE = ['purchases', 'requests', 'audits', 'company_settings']
 
 let passed = 0
 let failed = 0
@@ -119,7 +119,7 @@ for (const table of TABLES) {
   check(`${table} has RLS enabled`, sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`))
 }
 check(
-  'eleven tables are declared',
+  'ten tables are declared',
   [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length,
 )
 

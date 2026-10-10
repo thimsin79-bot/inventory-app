@@ -2,26 +2,24 @@
 
 import { useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { getInventoryItems, getRequests, getTransactions } from '@/services/inventoryService'
+import { getInventoryItems, getRequests } from '@/services/inventoryService'
 import type { Tables } from '@/types/database.types'
-import { formatDate, formatMoney } from '@/utils/format'
+import { formatMoney } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
-import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
+import { Card, EmptyState, PageHeader } from '@/components/ui'
 
 type ItemRow = Tables<'items'>
-type TxnRow = Tables<'transactions'>
 type RequestRow = Tables<'requests'>
 
 export default function DashboardPage() {
   const loadOverview = useCallback(async () => {
-    const [items, requests, transactions] = await Promise.all([
+    const [items, requests] = await Promise.all([
       getInventoryItems() as Promise<ItemRow[]>,
       getRequests(),
-      getTransactions(undefined, 8),
     ])
-    return { items, requests, transactions }
+    return { items, requests }
   }, [])
 
   const state = useAsyncData(loadOverview)
@@ -53,14 +51,6 @@ export default function DashboardPage() {
     () => (state.data?.items ?? []).filter((i) => i.qty <= i.min_qty).slice(0, 8),
     [state.data],
   )
-
-  const txnColumns: Column<TxnRow>[] = [
-    { key: 'date', header: 'Date', render: (r) => <span className="tabular-nums">{formatDate(r.date)}</span> },
-    { key: 'item', header: 'Item', render: (r) => r.item_name },
-    { key: 'type', header: 'Type', render: (r) => <StatusBadge status={r.type} /> },
-    { key: 'qty', header: 'Qty', render: (r) => <span className="tabular-nums">{r.qty}</span> },
-    { key: 'ref', header: 'Reference', render: (r) => r.ref ?? <span className="text-zinc-400">—</span> },
-  ]
 
   const lowColumns: Column<ItemRow>[] = [
     { key: 'barcode', header: 'Barcode', render: (r) => <span className="font-mono text-xs">{r.barcode}</span> },
@@ -101,14 +91,13 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Card>
-              <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Needs restocking</h2>
-                <Link href="/inventory" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
-                  View inventory
-                </Link>
-              </div>
+          <Card>
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Needs restocking</h2>
+              <Link href="/inventory" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
+                View inventory
+              </Link>
+            </div>
               <DataTable
                 columns={lowColumns}
                 rows={lowStockItems}
@@ -116,22 +105,6 @@ export default function DashboardPage() {
                 empty={<EmptyState title="Stock levels healthy" hint="No item is at or below its minimum quantity." />}
               />
             </Card>
-
-            <Card>
-              <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Recent stock movements</h2>
-                <Link href="/transactions" className="text-xs text-sky-700 hover:underline dark:text-sky-400">
-                  All transactions
-                </Link>
-              </div>
-              <DataTable
-                columns={txnColumns}
-                rows={state.data?.transactions ?? []}
-                rowKey={(r) => r.id}
-                empty={<EmptyState title="No movements yet" hint="Record one from the Inventory screen." />}
-              />
-            </Card>
-          </div>
 
           {state.data && state.data.requests.filter((r) => r.status === 'Pending').length > 0 && (
             <Card className="mt-6 px-4 py-3">

@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   getInventoryItems,
   getPurchases,
-  getTransactions,
   getRequests,
   getMaintenance,
 } from '@/services/inventoryService'
@@ -25,7 +24,6 @@ type PurchaseRow = Tables<'purchases'> & {
 const REPORTS = [
   { id: 'valuation', label: 'Inventory valuation by category' },
   { id: 'purchases', label: 'Purchases by supplier' },
-  { id: 'movements', label: 'Stock movements by type' },
   { id: 'requests', label: 'Requests by department' },
   { id: 'maintenance', label: 'Maintenance by status' },
 ] as const
@@ -51,14 +49,6 @@ const SUPPLIER_COLUMNS: Column<SupplierRow>[] = [
   { key: 'units', header: 'Items ordered', render: (r) => <span className="tabular-nums">{r.units}</span> },
   { key: 'spend', header: 'Total spend', render: (r) => <span className="tabular-nums">{formatMoney(r.spend)}</span> },
   { key: 'last', header: 'Last order', render: (r) => <span className="tabular-nums">{r.last ? formatDate(r.last) : dash}</span> },
-]
-
-type MovementRow = { key: string; type: string; movements: number; qty: number; last: string | null }
-const MOVEMENT_COLUMNS: Column<MovementRow>[] = [
-  { key: 'type', header: 'Type', render: (r) => <StatusBadge status={r.type} /> },
-  { key: 'movements', header: 'Movements', render: (r) => <span className="tabular-nums">{r.movements}</span> },
-  { key: 'qty', header: 'Total qty', render: (r) => <span className="tabular-nums">{r.qty}</span> },
-  { key: 'last', header: 'Last movement', render: (r) => <span className="tabular-nums">{r.last ? formatDate(r.last) : dash}</span> },
 ]
 
 type DepartmentRow = { key: string; department: string; requests: number; pending: number; approved: number; rejected: number; qty: number }
@@ -89,14 +79,13 @@ export default function ReportsPage() {
   const [report, setReport] = useState<ReportId>('valuation')
 
   const load = useCallback(async () => {
-    const [items, purchases, transactions, requests, maintenance] = await Promise.all([
+    const [items, purchases, requests, maintenance] = await Promise.all([
       getInventoryItems() as Promise<ItemRow[]>,
       getPurchases() as Promise<PurchaseRow[]>,
-      getTransactions(undefined, 1000),
       getRequests(),
       getMaintenance(),
     ])
-    return { items, purchases, transactions, requests, maintenance }
+    return { items, purchases, requests, maintenance }
   }, [])
 
   const state = useAsyncData(load)
@@ -128,18 +117,6 @@ export default function ReportsPage() {
       map.set(supplier, row)
     }
     return [...map.values()].sort((a, b) => b.spend - a.spend)
-  }, [state.data])
-
-  const movements = useMemo(() => {
-    const map = new Map<string, MovementRow>()
-    for (const t of state.data?.transactions ?? []) {
-      const row = map.get(t.type) ?? { key: t.type, type: t.type, movements: 0, qty: 0, last: null }
-      row.movements += 1
-      row.qty += t.qty
-      row.last = latest(row.last, t.date)
-      map.set(t.type, row)
-    }
-    return [...map.values()].sort((a, b) => b.movements - a.movements)
   }, [state.data])
 
   const departments = useMemo(() => {
@@ -237,14 +214,6 @@ export default function ReportsPage() {
               rows={suppliers}
               rowKey={(r) => r.key}
               empty={<EmptyState title="No purchase orders" hint="Record orders on the Purchases screen." />}
-            />
-          )}
-          {report === 'movements' && (
-            <DataTable
-              columns={MOVEMENT_COLUMNS}
-              rows={movements}
-              rowKey={(r) => r.key}
-              empty={<EmptyState title="No stock movements" hint="Movements are recorded from the Inventory screen." />}
             />
           )}
           {report === 'requests' && (

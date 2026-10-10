@@ -101,21 +101,7 @@ CREATE TABLE IF NOT EXISTS public.purchases (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 8. Transactions
-CREATE TABLE IF NOT EXISTS public.transactions (
-    id TEXT PRIMARY KEY,
-    item_barcode TEXT NOT NULL,
-    item_name TEXT NOT NULL,
-    warehouse TEXT,
-    type TEXT NOT NULL,
-    qty INTEGER NOT NULL,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    ref TEXT,
-    remark TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
-);
-
--- 9. Requisitions / Requests
+-- 8. Requisitions / Requests
 CREATE TABLE IF NOT EXISTS public.requests (
     id TEXT PRIMARY KEY,
     dept TEXT NOT NULL,
@@ -127,7 +113,7 @@ CREATE TABLE IF NOT EXISTS public.requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 10. Stock Audits
+-- 9. Stock Audits
 CREATE TABLE IF NOT EXISTS public.audits (
     id TEXT PRIMARY KEY,
     warehouse TEXT NOT NULL,
@@ -139,7 +125,7 @@ CREATE TABLE IF NOT EXISTS public.audits (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 11. Maintenance History
+-- 10. Maintenance History
 -- A simple log of servicing and repairs: who/what was maintained, when, and at
 -- what cost. It is not tied to `items` by a foreign key -- the log keeps its own
 -- item text so a record survives an item being renamed or deleted.
@@ -158,7 +144,7 @@ CREATE TABLE IF NOT EXISTS public.maintenance (
 -- next automatic reload, even though the table exists.
 NOTIFY pgrst, 'reload schema';
 
--- 12. Company Settings
+-- 11. Company Settings
 -- Single-row configuration holding the school's identity (name, address,
 -- contact, logo) shown across the app. The CHECK forces exactly one row and the
 -- Settings screen upserts on id 1. `logo_path` names an object in the `logos`
@@ -204,8 +190,6 @@ NOTIFY pgrst, 'reload schema';
 CREATE INDEX IF NOT EXISTS idx_items_barcode ON public.items (barcode);
 CREATE INDEX IF NOT EXISTS idx_items_category ON public.items (category_id);
 CREATE INDEX IF NOT EXISTS idx_items_warehouse ON public.items (warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_barcode ON public.transactions (item_barcode);
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions (date);
 CREATE INDEX IF NOT EXISTS idx_requests_date ON public.requests (date);
 CREATE INDEX IF NOT EXISTS idx_maintenance_date ON public.maintenance (date);
 
@@ -218,7 +202,6 @@ ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
@@ -236,7 +219,7 @@ ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 -- and it is gated by the shared secret in the API layer, not here.
 --
 -- One policy per table per command -- four per table, generated rather than
--- written out longhand because eleven tables times four commands is forty-four
+-- written out longhand because ten tables times four commands is forty
 -- statements to keep in step. Policy names are unique per table, so the three
 -- write policies cannot share one name; each carries its command:
 --
@@ -252,7 +235,7 @@ DO $policies$
 DECLARE
   all_tables text[] := ARRAY[
     'categories', 'suppliers', 'warehouses', 'departments',
-    'items', 'purchases', 'transactions', 'requests', 'audits', 'maintenance',
+    'items', 'purchases', 'requests', 'audits', 'maintenance',
     'company_settings'
   ];
 
@@ -328,7 +311,6 @@ REVOKE ALL ON public.warehouses FROM anon;
 REVOKE ALL ON public.departments FROM anon;
 REVOKE ALL ON public.items FROM anon;
 REVOKE ALL ON public.purchases FROM anon;
-REVOKE ALL ON public.transactions FROM anon;
 REVOKE ALL ON public.requests FROM anon;
 REVOKE ALL ON public.audits FROM anon;
 REVOKE ALL ON public.maintenance FROM anon;
@@ -340,7 +322,6 @@ REVOKE ALL ON public.warehouses FROM authenticated;
 REVOKE ALL ON public.departments FROM authenticated;
 REVOKE ALL ON public.items FROM authenticated;
 REVOKE ALL ON public.purchases FROM authenticated;
-REVOKE ALL ON public.transactions FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
 REVOKE ALL ON public.maintenance FROM authenticated;
@@ -357,14 +338,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.maintenance TO anon;
 
 -- The one limit beyond the anon/authenticated split: no screen deletes a
--- purchase, transaction, request or audit, and `services/inventoryService.ts`
+-- purchase, request or audit, and `services/inventoryService.ts`
 -- exports no delete for them either -- so DELETE is withheld at the grant. If a
 -- delete feature is ever added for one of these, add the grant in the same
 -- change. `items` keeps DELETE because the inventory screen does delete items.
 GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
-GRANT SELECT, INSERT, UPDATE ON public.transactions TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;
 -- company_settings is written only by the Settings screen upserting on id 1;
--- nothing deletes the row, so DELETE is withheld like the four tables above.
+-- nothing deletes the row, so DELETE is withheld like the three tables above.
 GRANT SELECT, INSERT, UPDATE ON public.company_settings TO anon;

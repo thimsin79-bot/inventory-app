@@ -22,7 +22,6 @@ export const PERMISSION_GROUPS = [
       { key: 'dashboard.view', label: 'Dashboard' },
       { key: 'inventory.view', label: 'Inventory' },
       { key: 'purchases.view', label: 'Purchases' },
-      { key: 'transactions.view', label: 'Transactions' },
       { key: 'requests.view', label: 'Requests' },
       { key: 'audits.view', label: 'Audits' },
       { key: 'categories.view', label: 'Categories' },
@@ -37,7 +36,6 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { key: 'inventory.manage', label: 'Inventory' },
       { key: 'purchases.manage', label: 'Purchases' },
-      { key: 'transactions.manage', label: 'Transactions' },
       { key: 'requests.manage', label: 'Requests' },
       { key: 'audits.manage', label: 'Audits' },
       { key: 'categories.manage', label: 'Categories' },

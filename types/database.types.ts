@@ -255,45 +255,6 @@ export interface Database {
           }
         ]
       }
-      transactions: {
-        Row: {
-          id: string
-          item_barcode: string
-          item_name: string
-          warehouse: string | null
-          type: string
-          qty: number
-          date: string
-          ref: string | null
-          remark: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          item_barcode: string
-          item_name: string
-          warehouse?: string | null
-          type: string
-          qty: number
-          date?: string
-          ref?: string | null
-          remark?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          item_barcode?: string
-          item_name?: string
-          warehouse?: string | null
-          type?: string
-          qty?: number
-          date?: string
-          ref?: string | null
-          remark?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       requests: {
         Row: {
           id: string

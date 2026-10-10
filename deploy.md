@@ -23,7 +23,7 @@ consciously decided. Nothing below — environment variables, schema, headers �
 
 The app holds exactly one credential: the Supabase publishable key, which ships to the browser by
 design. Every database request therefore reaches PostgREST as the `anon` role, and
-`supabase/schema.sql` grants `anon` read and write on all eleven tables. Those grants exist so the
+`supabase/schema.sql` grants `anon` read and write on all ten tables. Those grants exist so the
 app functions; they are **not** a security boundary, and row level security cannot tighten them,
 because there is no identity for it to check.
 
@@ -87,7 +87,7 @@ Paste the whole file into the Supabase dashboard → **SQL Editor** → new quer
 re-runnable: it drops its own policies by name, retires the older role-ladder and public-access
 policies, drops `private.current_role()` and the `private` schema itself, creates the `logos`
 bucket if missing, then generates `TO anon USING (true)` / `WITH CHECK (true)` policies on all
-eleven tables and grants `anon` SELECT, INSERT, UPDATE and DELETE.
+ten tables and grants `anon` SELECT, INSERT, UPDATE and DELETE.
 
 **No script in the repo executes SQL.** There is no migration runner and no CLI step; nothing in
 `npm run build` or the Vercel deploy touches the database. Running the file in the SQL editor is
@@ -95,9 +95,12 @@ a manual step, and nothing reminds you it is outstanding.
 
 Two details in the new script worth knowing:
 
-- `DELETE` is withheld at the grant on `purchases`, `transactions`, `requests`, `audits` and
+- `DELETE` is withheld at the grant on `purchases`, `requests`, `audits` and
   `company_settings`, because nothing in the app deletes them. `items`, `maintenance` and the four
   reference tables keep it.
+- `public.transactions` no longer exists: the Transactions module (screen, nav link, landing
+  option and report) was removed 2026-10-10 and the table was dropped on the live project. The
+  file does not create it, fresh or re-run.
 - `authenticated` is revoked on every table, so an account left over from before the removal is
   not a way in.
 
@@ -172,7 +175,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The build output should list the twelve app screens plus `/admin/users` as `○ Static` and the API
+The build output should list the eleven app screens plus `/admin/users` as `○ Static` and the API
 routes as `ƒ (Dynamic)`.
 
 Then locally, with a dev server on `:3000`:
@@ -227,7 +230,7 @@ unset or still holds the `.env.example` placeholder in the environment that buil
 variables are missing* below.
 
 **The page loads but every screen sits in an error state while `/api/supabase-test` says
-`unconfigured`.** Not a contradiction: the twelve screens are static shells and the data fetch
+`unconfigured`.** Not a contradiction: the eleven screens are static shells and the data fetch
 happens in the browser. Every consumer shares `supabaseEnvProblems()` in `lib/supabase/env.ts`,
 so the diagnostic cannot disagree with the app about which variable is wrong.
 

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import type { Tables, Inserts } from '@/types/database.types'
-import { Button, Field, Input, Label, Select, Textarea } from './ui'
+import type { Tables } from '@/types/database.types'
+import { Button, Field, Input, Label, Select } from './ui'
 
 export const MOVEMENT_TYPES = ['Stock In', 'Stock Out', 'Transfer', 'Adjustment', 'Return Out'] as const
 export type MovementType = (typeof MOVEMENT_TYPES)[number]
@@ -31,22 +31,17 @@ export const SIGNED_TYPES: MovementType[] = ['Adjustment']
 
 export function MovementForm({
   item,
-  warehouses,
   busy,
   onCancel,
   onSubmit,
 }: {
   item: Pick<Tables<'items'>, 'barcode' | 'name' | 'qty'>
-  warehouses: Pick<Tables<'warehouses'>, 'id' | 'name'>[]
   busy: boolean
   onCancel: () => void
-  onSubmit: (row: Inserts<'transactions'>, delta: number) => void
+  onSubmit: (delta: number) => void
 }) {
   const [type, setType] = useState<MovementType>('Stock In')
   const [amount, setAmount] = useState('1')
-  const [warehouse, setWarehouse] = useState('')
-  const [ref, setRef] = useState('')
-  const [remark, setRemark] = useState('')
   const [amountError, setAmountError] = useState<string | null>(null)
 
   function submit() {
@@ -69,18 +64,7 @@ export function MovementForm({
     }
 
     setAmountError(null)
-    onSubmit(
-      {
-        item_barcode: item.barcode,
-        item_name: item.name,
-        warehouse: warehouse || null,
-        type,
-        qty: n,
-        ref: ref.trim() || null,
-        remark: remark.trim() || null,
-      },
-      delta,
-    )
+    onSubmit(delta)
   }
 
   return (
@@ -111,31 +95,12 @@ export function MovementForm({
         <Input id="mv-amount" type="number" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
 
-      <Field label="Warehouse" htmlFor="mv-warehouse">
-        <Select id="mv-warehouse" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-          <option value="">— none —</option>
-          {warehouses.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <Field label="Reference" htmlFor="mv-ref">
-        <Input id="mv-ref" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="PO-2026-014, ISS-0341…" />
-      </Field>
-
-      <Field label="Remark" htmlFor="mv-remark" className="sm:col-span-2">
-        <Textarea id="mv-remark" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Optional" />
-      </Field>
-
       <div className="flex justify-end gap-2 border-t border-zinc-200 pt-3 sm:col-span-2 dark:border-zinc-800">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
         <Button type="button" variant="primary" onClick={submit} disabled={busy}>
-          {busy ? 'Saving…' : 'Record movement'}
+          {busy ? 'Saving…' : 'Apply'}
         </Button>
       </div>
     </div>

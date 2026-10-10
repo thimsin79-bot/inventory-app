@@ -79,17 +79,6 @@ INSERT INTO public.purchases (id, supplier_id, date, invoice, items_count, total
 ('PO-2026-009', 'SUP01', '2026-09-05', 'INV-88101', 8, 690.00, 'Received')
 ON CONFLICT (id) DO NOTHING;
 
--- Transactions
-INSERT INTO public.transactions (id, item_barcode, item_name, warehouse, type, qty, date, ref, remark) VALUES
-('TXN-10241', 'SCH000001', 'Whiteboard Marker', 'Main Store', 'Stock In', 100, '2026-09-28', 'PO-2026-014', 'Purchase received'),
-('TXN-10240', 'SCH000002', 'A4 Copy Paper', 'Main Store', 'Stock Out', 20, '2026-09-27', 'ISS-0341', 'Issued to Administration'),
-('TXN-10239', 'SCH000021', 'Office Chair', 'Main Store', 'Transfer', 6, '2026-09-26', 'TRF-0092', 'Transfer to Library Store'),
-('TXN-10238', 'SCH000060', 'Hand Sanitizer 500ml', 'Cleaning Supply Room', 'Stock In', 60, '2026-09-24', 'PO-2026-010', 'Purchase received'),
-('TXN-10237', 'SCH000031', 'English Dictionary', 'Library Store', 'Adjustment', -2, '2026-09-23', 'AUD-0018', 'Damaged during audit'),
-('TXN-10236', 'SCH000003', 'Student Notebook', 'Main Store', 'Stock Out', 150, '2026-09-22', 'ISS-0340', 'Issued to Primary Dept'),
-('TXN-10235', 'SCH000051', 'Volleyball Net', 'Main Store', 'Return Out', 2, '2026-09-21', 'RET-0007', 'Returned to supplier')
-ON CONFLICT (id) DO NOTHING;
-
 -- Requisition Requests
 INSERT INTO public.requests (id, dept, item_name, qty, date, requested_by, status) VALUES
 ('REQ-0341', 'Administration', 'A4 Copy Paper', 20, '2026-09-27', 'Mr. Rith', 'Issued'),

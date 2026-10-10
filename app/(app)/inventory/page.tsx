@@ -6,13 +6,11 @@ import {
   createItem,
   updateItem,
   deleteItem,
-  recordTransaction,
   getCategories,
-  getWarehouses,
   getSuppliers,
   nextBarcode,
 } from '@/services/inventoryService'
-import type { Tables, Inserts } from '@/types/database.types'
+import type { Tables } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
 import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
@@ -56,11 +54,9 @@ export default function InventoryPage() {
 
   const items = useAsyncData(loadItems)
   const categories = useAsyncData(getCategories)
-  const warehouses = useAsyncData(getWarehouses)
   const suppliers = useAsyncData(getSuppliers)
 
   const categoriesData = categories.data ?? []
-  const warehousesData = warehouses.data ?? []
   const suppliersData = suppliers.data ?? []
 
   const lowStock = useMemo(
@@ -116,14 +112,9 @@ export default function InventoryPage() {
     }
   }
 
-  async function submitMovement(row: Inserts<'transactions'>, delta: number) {
+  async function submitMovement(delta: number) {
     if (!moving) return
-    const id = moving.id
-    const nextQty = moving.qty + delta
-    const ok = await run(async () => {
-      await recordTransaction(row)
-      await updateItem(id, { qty: nextQty })
-    }, 'Recorded movement')
+    const ok = await run(() => updateItem(moving.id, { qty: moving.qty + delta }), 'Quantity adjusted')
     if (ok) setMoving(null)
   }
 
@@ -271,13 +262,12 @@ export default function InventoryPage() {
 
       <Modal
         open={moving !== null}
-        title="Record stock movement"
+        title="Adjust quantity"
         onClose={() => setMoving(null)}
       >
         {moving && (
           <MovementForm
             item={moving}
-            warehouses={warehousesData}
             busy={busy}
             onCancel={() => setMoving(null)}
             onSubmit={submitMovement}
@@ -310,7 +300,7 @@ export default function InventoryPage() {
       >
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           Delete <span className="font-medium text-zinc-900 dark:text-zinc-100">{deleting?.name}</span> (
-          {deleting?.barcode})? Past stock transactions referencing it are kept.
+          {deleting?.barcode})? This cannot be undone.
         </p>
       </Modal>
     </>
