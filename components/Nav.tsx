@@ -11,6 +11,7 @@ const LINKS: { href: string; label: string }[] = [
   { href: '/requests', label: 'Requests' },
   { href: '/audits', label: 'Audits' },
   { href: '/maintenance', label: 'Maintenance' },
+  { href: '/reports', label: 'Reports' },
   { href: '/categories', label: 'Categories' },
   { href: '/suppliers', label: 'Suppliers' },
   { href: '/departments', label: 'Departments' },

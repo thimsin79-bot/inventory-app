@@ -172,7 +172,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-The build output should list the eleven app screens plus `/admin/users` as `○ Static` and the API
+The build output should list the twelve app screens plus `/admin/users` as `○ Static` and the API
 routes as `ƒ (Dynamic)`.
 
 Then locally, with a dev server on `:3000`:
@@ -227,7 +227,7 @@ unset or still holds the `.env.example` placeholder in the environment that buil
 variables are missing* below.
 
 **The page loads but every screen sits in an error state while `/api/supabase-test` says
-`unconfigured`.** Not a contradiction: the eleven screens are static shells and the data fetch
+`unconfigured`.** Not a contradiction: the twelve screens are static shells and the data fetch
 happens in the browser. Every consumer shares `supabaseEnvProblems()` in `lib/supabase/env.ts`,
 so the diagnostic cannot disagree with the app about which variable is wrong.
 

@@ -43,8 +43,9 @@ the Vercel Git integration.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
-  (app)/                  the 11 app screens + shared sidebar shell
+  (app)/                  the 12 app screens + shared sidebar shell
   maintenance/            Maintenance History log: create + delete
+  reports/                read-only rollups: valuation, purchases, movements, requests, maintenance
   settings/               company info (DB-backed, logo upload) + browser-only preferences
   admin/layout.tsx        Admin Console shell: full-width main, "Back to the app" link
   admin/users/            the Admin Console page (moved here 2026-10-09)
@@ -77,9 +78,9 @@ the root `proxy.ts`, `lib/{auth.ts,permissionGate.ts}`, `lib/supabase/session.ts
 read the table).
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/transactions`, `/requests`, `/audits`,
-`/maintenance`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered static
-shells; data arrives on the client), and the Admin Console `/admin/users` (own shell, top-level).
-`/sign-in`, `/sign-up` and `/warehouses` 404.
+`/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered
+static shells; data arrives on the client), and the Admin Console `/admin/users` (own shell,
+top-level). `/sign-in`, `/sign-up` and `/warehouses` 404.
 
 ---
 
@@ -187,7 +188,7 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 - Client screens follow the `useAsyncData` + `AsyncBoundary` + `DataTable` pattern with
   `Column<T>[]`. There is no `ScreenGate`: a screen renders its content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.
-- `components/Nav.tsx` links the 11 screens plus `Admin console` (→ `/admin/users`); it no longer
+- `components/Nav.tsx` links the 12 screens plus `Admin console` (→ `/admin/users`); it no longer
   filters by permission. A new screen → add its entry to `LINKS` and a route under `app/(app)/`.
 - `DataTable` paginates client-side using the user's rows-per-page preference, so a screen does
   not manage paging state itself. The pager only appears when a table exceeds the page size.
@@ -240,6 +241,7 @@ curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/sign-in              
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/sign-up              # 404
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/warehouses           # 404
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/maintenance          # 200
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/reports              # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/settings             # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/admin/users          # 200 (lock screen)
 curl.exe -s http://localhost:3000/api/supabase-test                             # 200 {"status":"ready",...}
