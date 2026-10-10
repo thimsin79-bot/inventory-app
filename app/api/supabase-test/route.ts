@@ -3,8 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseEnvProblems } from '@/lib/supabase/env'
 
 export async function GET() {
-  // Uses the same check as the rest of the app, so this endpoint cannot report
-  // "ready" for a configuration the proxy would refuse to serve.
+  // No session gate any more: the app is public, and this endpoint reports
+  // whether the Supabase configuration and schema are usable. A misconfigured
+  // deployment cannot claim "ready" for a config the app would refuse.
   const problems = supabaseEnvProblems()
 
   if (problems.length > 0) {

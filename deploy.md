@@ -158,8 +158,9 @@ Deliberately **not** set:
 
 - `buildCommand` / `installCommand` / `outputDirectory`. These are detected correctly, and pinning
   them means a later change to `package.json` gets silently overridden.
-- `proxy`. There is no middleware to detect: `proxy.ts` was deleted on 2026-10-06, and the build
-  output has no `ƒ Proxy (Middleware)` line.
+- `proxy`. There is no middleware to detect: `proxy.ts` was deleted again on 2026-10-09 (an
+  auth layer had been added and then removed a second time), and the build output has no
+  `ƒ Proxy (Middleware)` line.
 - `cleanUrls` / `trailingSlash`. Handled by Next.js routing.
 - A Content-Security-Policy. Next.js hydration emits inline scripts and the browser Supabase
   client needs `connect-src` pointed at whichever project URL is configured, so a static CSP in
@@ -172,14 +173,14 @@ Changing `regions` takes effect on the next deployment, and only for new deploym
 Run these locally before pushing:
 
 ```bash
-npm run check    # check:env + check:rls, 22 / 49 assertions
+npm run check    # check:env + check:rls + check:gate, 22 / 50 / 22 assertions
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-The build output should list all ten app screens as `○ Static` and only `/api/supabase-test` as
-`ƒ (Dynamic)`.
+The build output should list the nine app screens plus `/admin/users` as `○ Static` and the API
+routes as `ƒ (Dynamic)`.
 
 Then locally, with a dev server on `:3000`:
 
@@ -205,10 +206,11 @@ the gate off (step 2), and remember it is on again afterwards.
 
 Checklist:
 
-- Locally `/` returns `200` with no redirect. A redirect to `/login` would mean the deleted route
-  guard is back.
-- `/login`, `/signup`, `/auth/callback` and `/admin/users` all return `404` — those routes were
-  deleted on 2026-10-06. A `200` on any of them means a stale build.
+- Locally `/` returns `200` with no redirect. A redirect to `/sign-in` would mean the session
+  gate is back.
+- `/login`, `/signup`, `/auth/callback` and `/warehouses` all return `404` — those routes were
+  deleted. A `200` on any of them means a stale build. `/admin/users` returns `200`: the Admin
+  Console lives there now, behind its shared-secret lock.
 - `/api/supabase-test` returns `"status":"ready"`. `unconfigured` means the env vars from step 3
   are missing or still placeholders; `connected_with_schema_missing` means the tables do not
   exist at all.
@@ -253,14 +255,15 @@ script, not the assertion.
 
 ## What happens when the variables are missing
 
-There is no proxy to fail closed any more (`proxy.ts` was deleted on 2026-10-06), so a missing
+There is no proxy to fail closed any more (`proxy.ts` was deleted again on 2026-10-09), so a missing
 variable surfaces inside the running app instead of as a `503`:
 
 | Request | Response |
 | --- | --- |
 | any app screen | `ErrorState` naming the missing or placeholder variable; the header badge reads `Supabase Not configured` |
 | `/api/supabase-test` | `200` with `"status":"unconfigured"` and the variable names in `details` |
-| `/login`, `/signup`, `/admin/users` | `404`; the routes no longer exist |
+| `/login`, `/signup`, `/warehouses` | `404`; the routes no longer exist |
+| `/admin/users` | `200`; the Admin Console renders its lock screen, and unlocks only with the shared secret |
 
 `lib/supabase/env.ts` treats a blank variable and an unedited `.env.example` as unconfigured. Both
 were previously read as valid: `KEY=` in an env file yields `''` rather than `undefined`, and

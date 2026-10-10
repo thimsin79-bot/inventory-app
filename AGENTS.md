@@ -16,16 +16,16 @@ boundary, the live row counts, the open security issues, and the verification co
 Hard rules for this repo:
 
 - Read the matching guide in `node_modules/next/dist/docs/` before using any Next.js API.
-- **There is an authentication layer again** (built 2026-10-09 on the 2026-10-06 removal):
-  `/sign-in`, a root `proxy.ts` session gate, RLS flipped to `authenticated`-only, and per-screen
-  permissions from `app_metadata.permissions`. Read CLAUDE.md §3 before touching RLS or the proxy;
-  do not widen a policy to `anon` or add `user_metadata` reads.
-- All data access is client-side through `services/inventoryService.ts`. It only works with a
-  signed-in session: `anon` is revoked from every table, and the proxy refuses session-less
-  requests (pages → `/sign-in`, `/api/*` → 403 JSON).
-- The Admin Console routes are gated twice: `adminSecretGate` (shared secret) then
-  `permissionCheck('admin.view' | 'admin.manage')`, never the reverse order.
+- **There is no sign-in layer** (removed 2026-10-09 for the second time): `/sign-in`, `/sign-up`,
+  the root `proxy.ts`, per-screen permission gates and RLS-to-`authenticated` are gone. RLS
+  policies are `TO anon` and the app is public. Read CLAUDE.md §3 before touching RLS; do not
+  reintroduce an `authenticated`-only split or a `user_metadata` read without saying why.
+- All data access is client-side through `services/inventoryService.ts` with the publishable key;
+  `anon` is granted every screen command and `authenticated` is revoked everywhere.
+- The Admin Console (moved 2026-10-09 to `app/admin/users`), its routes and the DB are gated one
+  way and one way only: `adminSecretGate` (shared secret). There is no second gate; do not re-add
+  `permissionCheck` unless a session layer exists again.
 - Reuse the primitives in `components/ui.tsx` and follow the existing
   `useAsyncData` + `AsyncBoundary` screen pattern.
 - Never commit, echo, or paste keys. `.env*` is gitignored.
-- Verify with `npm run lint`, `npx tsc --noEmit`, and `npm run build`.
+- Verify with `npm run check`, `npm run lint`, `npx tsc --noEmit`, and `npm run build`.

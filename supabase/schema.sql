@@ -165,21 +165,13 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 -- ==============================================================================
 -- Policies
 -- ==============================================================================
--- The app talks to the database with the publishable key, but every request now
--- goes through `/sign-in` and `proxy.ts` first, so PostgREST sees either a real
--- Supabase Auth session (presented as the `authenticated` role) or nothing
--- (`anon`). These policies are the second gate (the first is the proxy): `anon`
--- matches nothing, so an unauthenticated request touches no rows.
---
--- The finer-grained authorization model lives in the application layer, in the
--- session JWT: each user's `app_metadata.permissions` list (edited in
--- /admin/users) is what the screens and API routes branch on. RLS distinguishes
--- only signed-in (`authenticated`) from not signed-in (`anon`) -- it does NOT
--- branch on permissions. The policies below are deliberately `USING (true)`,
--- so permission enforcement stays in the app, and the honest boundary is: a raw
--- client with any valid signed-in session can reach every row. Moving the
--- nine-permission matrix into SQL is punted on because the tables are shared
--- across screens and the permission set changes per user at runtime.
+-- The app talks to the database with the public (publishable) key, and there is
+-- no sign-in layer any more, so PostgREST presents every request as the `anon`
+-- role. RLS stays enabled and the policies below are the whole truth about row
+-- access: `TO anon USING (true)` / `WITH CHECK (true)` make the tables readable
+-- and writable by anyone holding the publishable key, which is the intended
+-- state of this build -- the Admin Console is the only gated part of the app,
+-- and it is gated by the shared secret in the API layer, not here.
 --
 -- One policy per table per command -- four per table, generated rather than
 -- written out longhand because nine tables times four commands is thirty-six
@@ -190,10 +182,6 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 --   write on <table> (insert)  INSERT
 --   write on <table> (update)  UPDATE
 --   write on <table> (delete)  DELETE
---
--- `TO authenticated` rather than the default `TO public`, so the grant is an
--- accurate statement about who this is for. It also fails closed: `anon` matches
--- nothing, so a session-less request gets zero rows or permission denied.
 --
 -- WITH CHECK is as load-bearing as USING. Without it a caller could insert a row,
 -- or update one, that the USING clause would never have let them see.
@@ -214,8 +202,8 @@ BEGIN
     -- all of it back, and a leftover policy from an earlier grant scheme would
     -- otherwise keep granting access next to the ones created below. Dropping
     -- by lookup rather than by name list also retires names this file has never
-    -- heard of. The role-ladder and pre-role-ladder policies are named here too,
-    -- so a re-run retires them even on a table where the lookup comes back empty.
+    -- heard of. Pre-2026-10-09 policies are named here too, so a re-run retires
+    -- them even on a table where the lookup comes back empty.
     FOR p IN SELECT polname FROM pg_policy WHERE polrelid = format('public.%I', t)::regclass LOOP
       EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', p.polname, t);
     END LOOP;
@@ -226,22 +214,22 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'write on ' || t, t);
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (true)',
+      'CREATE POLICY %I ON public.%I FOR SELECT TO anon USING (true)',
       'read on ' || t, t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (true)',
+      'CREATE POLICY %I ON public.%I FOR INSERT TO anon WITH CHECK (true)',
       'write on ' || t || ' (insert)', t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (true) WITH CHECK (true)',
+      'CREATE POLICY %I ON public.%I FOR UPDATE TO anon USING (true) WITH CHECK (true)',
       'write on ' || t || ' (update)', t
     );
 
     EXECUTE format(
-      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (true)',
+      'CREATE POLICY %I ON public.%I FOR DELETE TO anon USING (true)',
       'write on ' || t || ' (delete)', t
     );
   END LOOP;
@@ -291,18 +279,18 @@ REVOKE ALL ON public.transactions FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
 
 -- The one limit beyond the anon/authenticated split: no screen deletes a
 -- purchase, transaction, request or audit, and `services/inventoryService.ts`
 -- exports no delete for them either -- so DELETE is withheld at the grant. If a
 -- delete feature is ever added for one of these, add the grant in the same
 -- change. `items` keeps DELETE because the inventory screen does delete items.
-GRANT SELECT, INSERT, UPDATE ON public.purchases TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.transactions TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.requests TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.audits TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.transactions TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;

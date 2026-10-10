@@ -7,7 +7,6 @@ import type { Tables } from '@/types/database.types'
 import { formatDate, formatMoney } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
-import { ScreenGate } from '@/components/ScreenGate'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Card, EmptyState, PageHeader, StatusBadge } from '@/components/ui'
 
@@ -84,8 +83,7 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description="Inventory position across all warehouses." />
 
-      <ScreenGate permission="dashboard.view">
-        <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
+      <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
             {tiles.map((t) => (
               <Card key={t.label} className="px-4 py-3">
@@ -149,7 +147,6 @@ export default function DashboardPage() {
             </Card>
           )}
           </AsyncBoundary>
-        </ScreenGate>
     </>
   )
 }

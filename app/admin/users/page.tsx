@@ -13,8 +13,6 @@ import { errorMessage } from '@/utils/errors'
 import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
-import { ScreenGate } from '@/components/ScreenGate'
-import { useAuth } from '@/components/AuthProvider'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
 import { PermissionPicker } from '@/components/PermissionPicker'
@@ -36,8 +34,6 @@ function isBanned(user: AdminUser): boolean {
 }
 
 export default function AdminUsersPage() {
-  const { can } = useAuth()
-  const manage = can('admin.manage')
   const [notice, setNotice] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -198,43 +194,41 @@ export default function AdminUsersPage() {
     },
   ]
 
-  if (manage) {
-    columns.push({
-      key: 'actions',
-      header: '',
-      className: 'text-right',
-      render: (r) => (
-        <div className="flex justify-end gap-1">
-          <Button
-            size="sm"
-            onClick={() => {
-              setPermDraft(r.permissions)
-              setActionError(null)
-              setEditingPerms(r)
-            }}
-          >
-            Permissions
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setNewPassword('')
-              setActionError(null)
-              setResettingPw(r)
-            }}
-          >
-            Password
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setBanning(r)}>
-            {isBanned(r) ? 'Unban' : 'Ban'}
-          </Button>
-          <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
-            Delete
-          </Button>
-        </div>
-      ),
-    })
-  }
+  columns.push({
+    key: 'actions',
+    header: '',
+    className: 'text-right',
+    render: (r) => (
+      <div className="flex justify-end gap-1">
+        <Button
+          size="sm"
+          onClick={() => {
+            setPermDraft(r.permissions)
+            setActionError(null)
+            setEditingPerms(r)
+          }}
+        >
+          Permissions
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            setNewPassword('')
+            setActionError(null)
+            setResettingPw(r)
+          }}
+        >
+          Password
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setBanning(r)}>
+          {isBanned(r) ? 'Unban' : 'Ban'}
+        </Button>
+        <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
+          Delete
+        </Button>
+      </div>
+    ),
+  })
 
   const activeUnlockError =
     unlockError ??
@@ -247,18 +241,16 @@ export default function AdminUsersPage() {
         description={users.data ? `${users.data.length} accounts` : undefined}
         actions={
           locked ? undefined : (
-            manage && (
-              <Button variant="primary" onClick={openCreate}>
-                New user
-              </Button>
-            )
+            <Button variant="primary" onClick={openCreate}>
+              New user
+            </Button>
           )
         }
       />
 
       <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">
-        Accounts live in Supabase Auth. Permission ticks are stored per user and enforced
-        across the app. Changes apply after the account&apos;s session token next refreshes.
+        Accounts live in Supabase Auth. Permission ticks are stored per account and are
+        recorded here; they currently decide nothing while the app has no sign-in screen.
       </p>
 
       {locked ? (
@@ -293,7 +285,7 @@ export default function AdminUsersPage() {
           </div>
         </Card>
       ) : (
-        <ScreenGate permission="admin.view">
+        <>
           {notice && (
             <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
               {notice}
@@ -325,7 +317,7 @@ export default function AdminUsersPage() {
               />
             </AsyncBoundary>
           </Card>
-        </ScreenGate>
+        </>
       )}
 
       <Modal

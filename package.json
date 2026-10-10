@@ -13,8 +13,7 @@
     "check:env": "node scripts/check-supabase-env.mjs",
     "check:rls": "node scripts/check-rls.mjs",
     "check:gate": "node scripts/check-admin-gate.mjs",
-    "check:auth": "node scripts/check-auth.mjs",
-    "check": "npm run check:env && npm run check:rls && npm run check:gate && npm run check:auth"
+    "check": "npm run check:env && npm run check:rls && npm run check:gate"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

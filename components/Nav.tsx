@@ -2,30 +2,26 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useAuth } from '@/components/AuthProvider'
-import type { PermissionKey } from '@/lib/permissions'
 
-const LINKS: { href: string; label: string; permission: PermissionKey }[] = [
-  { href: '/', label: 'Dashboard', permission: 'dashboard.view' },
-  { href: '/inventory', label: 'Inventory', permission: 'inventory.view' },
-  { href: '/purchases', label: 'Purchases', permission: 'purchases.view' },
-  { href: '/transactions', label: 'Transactions', permission: 'transactions.view' },
-  { href: '/requests', label: 'Requests', permission: 'requests.view' },
-  { href: '/audits', label: 'Audits', permission: 'audits.view' },
-  { href: '/categories', label: 'Categories', permission: 'categories.view' },
-  { href: '/warehouses', label: 'Warehouses', permission: 'warehouses.view' },
-  { href: '/suppliers', label: 'Suppliers', permission: 'suppliers.view' },
-  { href: '/departments', label: 'Departments', permission: 'departments.view' },
-  { href: '/admin/users', label: 'Users', permission: 'admin.view' },
+const LINKS: { href: string; label: string }[] = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/inventory', label: 'Inventory' },
+  { href: '/purchases', label: 'Purchases' },
+  { href: '/transactions', label: 'Transactions' },
+  { href: '/requests', label: 'Requests' },
+  { href: '/audits', label: 'Audits' },
+  { href: '/categories', label: 'Categories' },
+  { href: '/suppliers', label: 'Suppliers' },
+  { href: '/departments', label: 'Departments' },
+  { href: '/admin/users', label: 'Admin console' },
 ]
 
 export function Nav() {
   const pathname = usePathname()
-  const { can } = useAuth()
 
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-      {LINKS.filter((link) => can(link.permission)).map((link) => {
+      {LINKS.map((link) => {
         const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
         return (
           <Link

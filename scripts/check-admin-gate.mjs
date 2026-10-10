@@ -2,15 +2,14 @@
  * Checks the Admin Console gate in lib/adminGate.ts and the two route files
  * that call it.
  *
- * There is an authentication layer (since 2026-10-09) and both Admin Console routes
- * call `permissionCheck` after this gate — see check-auth.mjs — but the shared secret
- * is still the first thing standing between any visitor and the Management-API PAT
- * behind /api/admin/users. It is therefore the one guard whose failure is silent:
- * a route that forgets to call it answers 200 with a full user list, and
- * nothing in the UI looks different. The assertions below cover both halves
- * of that — the decision function itself (fail closed, timing-safe, trims)
- * and the wiring in the route files, because a correct helper that is not
- * called is the same as no gate at all.
+ * The shared secret is the only thing standing between any visitor and the
+ * Management-API PAT behind /api/admin/users -- the app has no sign-in layer,
+ * so there is no session gate after this one. It is therefore the one guard
+ * whose failure is silent: a route that forgets to call it answers 200 with a
+ * full user list, and nothing in the UI looks different. The assertions below
+ * cover both halves of that -- the decision function itself (fail closed,
+ * timing-safe, trims) and the wiring in the route files, because a correct
+ * helper that is not called is the same as no gate at all.
  *
  * Run with `npm run check:gate`.
  */
