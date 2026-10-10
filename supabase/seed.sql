@@ -69,6 +69,11 @@ INSERT INTO public.items (barcode, name, category_id, brand, unit, cost, price, 
 ('SCH000081', 'ID Card Ribbon (Color)', 'C9', 'Hiti', 'Roll', 18.00, 0.00, 5, 3, 'WH001', 'Low Stock')
 ON CONFLICT (barcode) DO NOTHING;
 
+-- Where seeded items are kept, so the Location field has real-looking values.
+UPDATE public.items SET location = 'Main Store, 1st floor' WHERE barcode = 'SCH000001';
+UPDATE public.items SET location = 'Main Store, 1st floor' WHERE barcode = 'SCH000002';
+UPDATE public.items SET location = 'IT Equipment Room, 2nd floor' WHERE barcode = 'SCH000012';
+
 -- Purchases
 INSERT INTO public.purchases (id, supplier_id, date, invoice, items_count, total, status) VALUES
 ('PO-2026-014', 'SUP01', '2026-09-28', 'INV-88213', 4, 412.50, 'Received'),

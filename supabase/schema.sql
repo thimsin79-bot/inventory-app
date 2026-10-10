@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.items (
     warehouse_id TEXT REFERENCES public.warehouses(id) ON DELETE SET NULL,
     supplier_id TEXT REFERENCES public.suppliers(id) ON DELETE SET NULL,
     department_location TEXT,
+    location TEXT,
     purchase_date DATE,
     remark TEXT,
     status TEXT NOT NULL DEFAULT 'Active',
@@ -81,6 +82,7 @@ ALTER TABLE public.items ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS serial_number TEXT;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS supplier_id TEXT REFERENCES public.suppliers(id) ON DELETE SET NULL;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS department_location TEXT;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS location TEXT;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS purchase_date DATE;
 ALTER TABLE public.items ADD COLUMN IF NOT EXISTS remark TEXT;
 

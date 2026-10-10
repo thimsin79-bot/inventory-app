@@ -15,6 +15,7 @@ export type ItemFormState = {
   purchase_date: string
   supplier_id: string
   department_location: string
+  location: string
   remark: string
 }
 
@@ -30,6 +31,7 @@ export const EMPTY_ITEM: ItemFormState = {
   purchase_date: '',
   supplier_id: '',
   department_location: '',
+  location: '',
   remark: '',
 }
 
@@ -47,6 +49,7 @@ export function itemToForm(item: Tables<'items'>): ItemFormState {
     purchase_date: item.purchase_date ?? '',
     supplier_id: item.supplier_id ?? '',
     department_location: item.department_location ?? '',
+    location: item.location ?? '',
     remark: item.remark ?? '',
   }
 }
@@ -87,6 +90,7 @@ export function itemFormToRow(
       purchase_date: form.purchase_date || null,
       supplier_id: form.supplier_id || null,
       department_location: form.department_location.trim() || null,
+      location: form.location.trim() || null,
       remark: form.remark.trim() || null,
     },
   }
@@ -164,12 +168,20 @@ export function ItemFormFields({
           ))}
         </Select>
       </Field>
-      <Field label="Department / Location" htmlFor="item-department">
+      <Field label="Department" htmlFor="item-department">
         <Input
           id="item-department"
           value={form.department_location}
           onChange={(e) => set('department_location', e.target.value)}
           placeholder="e.g. Grade 10 Office"
+        />
+      </Field>
+      <Field label="Location" htmlFor="item-location">
+        <Input
+          id="item-location"
+          value={form.location}
+          onChange={(e) => set('location', e.target.value)}
+          placeholder="e.g. Room B2, 2nd floor"
         />
       </Field>
       <Field label="User Remark" htmlFor="item-remark">

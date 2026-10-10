@@ -197,8 +197,13 @@ export default function InventoryPage() {
     { key: 'supplier', header: 'Supplier', render: (r) => r.supplier?.company ?? <span className="text-zinc-400">—</span> },
     {
       key: 'dept',
-      header: 'Department / Location',
+      header: 'Department',
       render: (r) => r.department_location ?? <span className="text-zinc-400">—</span>,
+    },
+    {
+      key: 'location',
+      header: 'Location',
+      render: (r) => r.location ?? <span className="text-zinc-400">—</span>,
     },
   ]
 

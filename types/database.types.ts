@@ -138,6 +138,7 @@ export interface Database {
           warehouse_id: string | null
           supplier_id: string | null
           department_location: string | null
+          location: string | null
           purchase_date: string | null
           remark: string | null
           status: string
@@ -161,6 +162,7 @@ export interface Database {
           warehouse_id?: string | null
           supplier_id?: string | null
           department_location?: string | null
+          location?: string | null
           purchase_date?: string | null
           remark?: string | null
           status?: string
@@ -184,6 +186,7 @@ export interface Database {
           warehouse_id?: string | null
           supplier_id?: string | null
           department_location?: string | null
+          location?: string | null
           purchase_date?: string | null
           remark?: string | null
           status?: string
