@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getInventoryItems,
   getPurchases,
@@ -12,7 +12,7 @@ import { formatDate, formatMoney } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
-import { Card, EmptyState, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
+import { Button, Card, EmptyState, Label, PageHeader, Select, StatusBadge } from '@/components/ui'
 
 type ItemRow = Tables<'items'> & {
   category: Tables<'categories'> | null
@@ -77,6 +77,19 @@ function latest(a: string | null, b: string | null): string | null {
 
 export default function ReportsPage() {
   const [report, setReport] = useState<ReportId>('valuation')
+  const printedAtRef = useRef<HTMLParagraphElement>(null)
+
+  // Stamp the print header's date at print time (never during render) so the
+  // static HTML and the hydrated DOM stay identical.
+  useEffect(() => {
+    const beforePrint = () => {
+      if (printedAtRef.current) {
+        printedAtRef.current.textContent = `Inventory Management — generated ${new Date().toLocaleDateString()}`
+      }
+    }
+    addEventListener('beforeprint', beforePrint)
+    return () => removeEventListener('beforeprint', beforePrint)
+  }, [])
 
   const load = useCallback(async () => {
     const [items, purchases, requests, maintenance] = await Promise.all([
@@ -170,10 +183,12 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader title="Reports" description="Read-only summaries computed from the same data as each screen." />
+      <div className="print:hidden">
+        <PageHeader title="Reports" description="Read-only summaries computed from the same data as each screen." />
+      </div>
 
       <AsyncBoundary loading={state.loading} error={state.error} errorCode={state.errorCode} onRetry={state.reload}>
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="mb-6 grid grid-cols-2 gap-3 print:hidden lg:grid-cols-3">
           {tiles.map((t) => (
             <Card key={t.label} className="px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t.label}</p>
@@ -182,8 +197,15 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        <Card>
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <Card className="print:border-0 print:shadow-none">
+          <div className="hidden px-4 pt-4 print:block">
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
+              {REPORTS.find((r) => r.id === report)?.label}
+            </h1>
+            <p ref={printedAtRef} className="mt-1 text-xs text-zinc-500">Inventory Management</p>
+          </div>
+
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 px-4 py-3 print:hidden dark:border-zinc-800">
             <div className="w-full sm:w-72">
               <Label htmlFor="report-kind">Report</Label>
               <Select
@@ -198,6 +220,23 @@ export default function ReportsPage() {
                 ))}
               </Select>
             </div>
+            <Button onClick={() => window.print()}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-4"
+                aria-hidden="true"
+              >
+                <path d="M6 9V2h12v7" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <path d="M18 14H6v8h12Z" />
+              </svg>
+              Print report
+            </Button>
           </div>
 
           {report === 'valuation' && (

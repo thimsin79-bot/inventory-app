@@ -12,7 +12,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           runs before the shell paints. */}
       <script dangerouslySetInnerHTML={{ __html: GATE_INIT_SCRIPT }} />
       <LandingRedirect />
-      <aside className="border-b border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40 lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
+      <aside className="border-b border-zinc-200 bg-zinc-50/60 print:hidden dark:border-zinc-800 dark:bg-zinc-900/40 lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col px-4 py-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-3">
             <p className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Inventory</p>
@@ -21,7 +21,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Nav />
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-6 print:px-0 print:py-0 sm:px-6 lg:px-8">{children}</main>
     </div>
   )
 }
