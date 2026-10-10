@@ -15,7 +15,12 @@ const SIGN_UP_PATH = '/sign-up'
  * `permissionGate` for what the signed-in user may do (CLAUDE.md §3).
  */
 export async function proxy(request: NextRequest) {
-  const session = await sessionFromRequest(request)
+  let session
+  try {
+    session = await sessionFromRequest(request)
+  } catch {
+    session = { user: null, response: NextResponse.next({ request }) }
+  }
   const { pathname } = request.nextUrl
 
   if (pathname.startsWith('/api/')) {

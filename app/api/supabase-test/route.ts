@@ -65,7 +65,7 @@ export async function GET() {
         connected: false,
         error: errorMessage,
       },
-      { status: 500 }
+      { status: 200 }
     )
   }
 }

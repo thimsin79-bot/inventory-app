@@ -36,7 +36,15 @@ export async function sessionFromRequest(request: NextRequest): Promise<ProxySes
     },
   })
 
-  const { data, error } = await supabase.auth.getClaims()
+  let data = null
+  let error = null
+  try {
+    const res = await supabase.auth.getClaims()
+    data = res.data
+    error = res.error
+  } catch (err) {
+    error = err
+  }
   const user = error || !data?.claims ? null : sessionFromAuth(data.claims)
 
   return { user, response }

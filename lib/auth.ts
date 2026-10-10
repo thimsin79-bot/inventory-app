@@ -9,10 +9,14 @@ import { sessionFromAuth, type PermissionKey, type SessionUser } from '@/lib/per
  * whatever is sitting in the cookie jar.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) return null
-  return sessionFromAuth(data.claims)
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.auth.getClaims()
+    if (error || !data?.claims) return null
+    return sessionFromAuth(data.claims)
+  } catch {
+    return null
+  }
 }
 
 /**
