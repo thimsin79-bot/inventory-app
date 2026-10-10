@@ -26,7 +26,10 @@ Hard rules for this repo:
   `/login` pre-paint when the flag is missing (Nav has Sign out). This is a **client-side UX gate
   only** — it is not a security boundary: the flag is forgeable, RLS stays `TO anon`, and data is
   still readable through the publishable key. `app_users` must stay RLS-on with **no
-  policies and no grants**; `check:rls` enforces that. Do not upgrade this to a real session
+  policies and no grants**; `check:rls` enforces that. The Users screen
+  (`app/(app)/users`) lists/creates/deletes these accounts through the SECURITY DEFINER
+  functions `list_login_users` / `create_login_user` / `delete_login_user` — never through
+  table grants, and hashes are never returned. Do not upgrade this to a real session
   layer (server-issued cookies, RLS-to-`authenticated`) without an explicit request.
 - All data access is client-side through `services/inventoryService.ts` with the publishable key;
   `anon` is granted every screen command and `authenticated` is revoked everywhere.

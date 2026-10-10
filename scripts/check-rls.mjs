@@ -174,10 +174,32 @@ check(`${APP_USERS} has no policies at all`, !new RegExp(`CREATE POLICY[^;]*ON p
 check(`${APP_USERS} is granted nothing to anyone`, !new RegExp(`GRANT(?! EXECUTE)[^;]*ON public\\.${APP_USERS}`).test(sql))
 check(`${APP_USERS} is revoked from anon`, sql.includes(`REVOKE ALL ON public.${APP_USERS} FROM anon`))
 check(`${APP_USERS} is revoked from authenticated`, sql.includes(`REVOKE ALL ON public.${APP_USERS} FROM authenticated`))
-check('login_user is the sole gate into app_users', sql.includes('FUNCTION public.login_user') && sql.includes('SECURITY DEFINER'))
-check('login_user owes its access to a deliberate EXECUTE grant', sql.includes('GRANT EXECUTE ON FUNCTION public.login_user(TEXT, TEXT) TO anon'))
-check('login_user is not executable by PUBLIC', sql.includes('REVOKE ALL ON FUNCTION public.login_user(TEXT, TEXT) FROM PUBLIC'))
-check('login_user returns only ok and display_name', sql.includes('RETURNS TABLE (ok BOOLEAN, display_name TEXT)'))
+
+const APP_USER_FUNCTIONS = ['login_user', 'list_login_users', 'create_login_user', 'delete_login_user']
+check(
+  'app_users is reached only through SECURITY DEFINER functions',
+  APP_USER_FUNCTIONS.every((f) => sql.includes(`FUNCTION public.${f}`)) && sql.includes('SECURITY DEFINER'),
+)
+check(
+  'every app_users function is granted exactly EXECUTE to anon',
+  APP_USER_FUNCTIONS.every((f) => new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${f}`).test(sql)),
+)
+check(
+  'every app_users function is revoked from PUBLIC',
+  APP_USER_FUNCTIONS.every((f) => new RegExp(`REVOKE ALL ON FUNCTION public\\.${f}`).test(sql)),
+)
+check(
+  'no app_users function returns password_hash',
+  !/RETURNS[^;]*password_hash/.test(sql),
+)
+check(
+  'login_user returns only ok and display_name',
+  sql.includes('RETURNS TABLE (ok BOOLEAN, display_name TEXT)'),
+)
+check(
+  'list_login_users returns only usernames and display data',
+  sql.includes('RETURNS TABLE (username TEXT, display_name TEXT, created_at TIMESTAMPTZ)'),
+)
 
 console.log('the removed role ladder leaves nothing behind')
 // The teardown statements are allowed; what must not come back is a definition.

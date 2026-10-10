@@ -224,6 +224,71 @@ $$;
 REVOKE ALL ON FUNCTION public.login_user(TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.login_user(TEXT, TEXT) TO anon;
 
+-- The users screen manages these accounts from a form, so like login_user it
+-- has no direct table access either: these SECURITY DEFINER functions are the
+-- whole surface, and each returns only what the UI may see -- never
+-- `password_hash`. app_users stays ungranted, so an INSERT into the table is
+-- not reachable over PostgREST at all; a new account goes through
+-- `create_login_user`, which hashes the password before it is stored.
+-- `login_user` above takes one password already hashed; the pair between a
+-- form and the stored hash is made only here.
+
+CREATE OR REPLACE FUNCTION public.list_login_users()
+RETURNS TABLE (username TEXT, display_name TEXT, created_at TIMESTAMPTZ)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT app.username, app.display_name, app.created_at
+    FROM public.app_users app
+    ORDER BY app.username;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_login_user(p_username TEXT, p_password TEXT, p_display_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    IF p_username IS NULL OR btrim(p_username) = '' OR p_password IS NULL OR char_length(p_password) < 4 THEN
+        RETURN FALSE;
+    END IF;
+
+    INSERT INTO public.app_users (username, password_hash, display_name)
+    VALUES (
+        btrim(p_username),
+        crypt(p_password, gen_salt('bf')),
+        CASE WHEN p_display_name IS NULL OR btrim(p_display_name) = '' THEN NULL ELSE btrim(p_display_name) END
+    )
+    ON CONFLICT (username) DO NOTHING;
+
+    RETURN FOUND;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.delete_login_user(p_username TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    DELETE FROM public.app_users WHERE username = p_username;
+    RETURN FOUND;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.list_login_users() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.create_login_user(TEXT, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.delete_login_user(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_login_users() TO anon;
+GRANT EXECUTE ON FUNCTION public.create_login_user(TEXT, TEXT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.delete_login_user(TEXT) TO anon;
+
 -- Logo storage. A public bucket so the logo serves without a signed URL; the
 -- Settings screen uploads with the anon role, and the policies below are the
 -- whole storage story for this bucket. The bucket insert is idempotent.

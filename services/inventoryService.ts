@@ -559,8 +559,8 @@ export async function updateRequestStatus(id: string, status: string, client?: C
 /**
  * Verify a username/password pair against the `login_user` database function.
  * The function returns just `ok` and a display name; password hashes never
- * leave the database. The /login page is standalone -- it does not start a
- * session or gate any screen.
+ * leave the database. The /login page calls this and, on `ok`, writes the
+ * client-side signed-in flag that gates the (app) screens.
  */
 export async function loginUser(
   username: string,
@@ -574,5 +574,55 @@ export async function loginUser(
 
   if (error) throw error
   return { ok: data?.ok ?? false, display_name: data?.display_name ?? null }
+}
+
+export type LoginUserRow = {
+  username: string
+  display_name: string | null
+  created_at: string
+}
+
+/**
+ * List the /login accounts (username, display name, created at) through the
+ * `list_login_users` function. It never returns a password hash.
+ */
+export async function getLoginUsers(client?: Client): Promise<LoginUserRow[]> {
+  const supabase = getClient(client)
+  const { data, error } = await supabase.rpc('list_login_users')
+
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Create a /login account. The password is hashed inside the database by
+ * `create_login_user` (bcrypt via pgcrypto); the plaintext is sent over the
+ * request and never stored. Returns false when the username is taken or the
+ * password is too short (< 4 characters).
+ */
+export async function createLoginUser(
+  username: string,
+  password: string,
+  displayName?: string,
+  client?: Client,
+): Promise<boolean> {
+  const supabase = getClient(client)
+  const { data, error } = await supabase.rpc('create_login_user', {
+    p_username: username,
+    p_password: password,
+    p_display_name: displayName?.trim() || null,
+  })
+
+  if (error) throw error
+  return data ?? false
+}
+
+/** Remove a /login account. Returns false if the username did not exist. */
+export async function deleteLoginUser(username: string, client?: Client): Promise<boolean> {
+  const supabase = getClient(client)
+  const { data, error } = await supabase.rpc('delete_login_user', { p_username: username })
+
+  if (error) throw error
+  return data ?? false
 }
 

@@ -42,7 +42,7 @@ the Vercel Git integration.
   function; verified over REST that `admin`/valid credentials → `{ok: true, display_name}`,
   wrong credentials → `{ok: false}`, and any read of `app_users` itself is denied (HTTP 401).
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
-  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 63
+  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 65
   assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping and `check:rls` reads `supabase/schema.sql`. The session-and-permission check
   (`check:auth`) and the Admin Console gate check (`check:gate`) were deleted with their
@@ -55,7 +55,7 @@ the Vercel Git integration.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
-  (app)/                  the 11 app screens + shared sidebar shell; renders the client-side
+  (app)/                  the 12 app screens + shared sidebar shell; renders the client-side
                           sign-in gate script (lib/session.ts) before its first paint
   login/                  username + password sign-in form (no email). On success writes the
                           `inventory.signedIn` localStorage flag and opens the app; failed
@@ -91,7 +91,7 @@ The standalone `app/(app)/warehouses/` screen was removed too (the `warehouses` 
 read the table).
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/requests`, `/audits`,
-`/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered
+`/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/users`, `/settings` (prerendered
 static shells; data arrives on the client), plus `/login` — a standalone page outside the `(app)`
 shell that verifies a username + password against `app_users` and sets no session.
 `/sign-in`, `/sign-up`, `/warehouses`, `/transactions` and `/admin/users` 404.
@@ -111,13 +111,18 @@ before touching RLS.
   intended state: a school inventory tool with no accounts.
 - **The one exception to "every table": `app_users`.** The `/login` credential store is
   RLS-enabled with **no policies and no grants** (`check:rls` guards this), so PostgREST
-  cannot read it at all — password hashes never leave the database. The only entry point is
-  the `login_user(username, password)` function in `schema.sql`: a `SECURITY DEFINER` routine
-  with `SET search_path = public, extensions, pg_temp` that returns just `ok` + `display_name`
-  (`extensions` is on the path because pgcrypto lives there). The client calls it through
-  `supabase.rpc('login_user', …)` in `services/inventoryService.ts:loginUser`. This is **not**
-  a session layer and does not gate anything; if `/login` ever must gate screens, the boundary
-  to revisit is here plus the browser client key, not just a redirect.
+  cannot read it at all — password hashes never leave the database. The only way in is a
+  family of `SECURITY DEFINER` functions in `schema.sql`, all with a pinned
+  `search_path` and only `EXECUTE` granted to `anon`:
+  - `login_user(username, password)` — the gate; returns just `ok` + `display_name`.
+  - `list_login_users()` — usernames, display names, created dates for the Users screen; never a hash.
+  - `create_login_user(username, password, display_name)` — hashes the password (pgcrypto `crypt`/`gen_salt`
+    are in the `extensions` schema, hence that entry on the search_path) and inserts; returns
+    false for a taken username or a password under 4 characters.
+  - `delete_login_user(username)` — removes an account.
+  The Users screen (`app/(app)/users`) drives them through the browser client like every
+  other screen — `create_login_user` is the only place a plaintext password ever enters the
+  database, and it is hashed before storage.
 - **There is a client-side entrance gate, and only that.** As of 2026-10-10 the `(app)` layout
   runs `lib/session.ts`'s `GATE_INIT_SCRIPT` before first paint and redirects to `/login` when
   `localStorage['inventory.signedIn']` is missing; `/login` writes that flag after a successful
@@ -236,7 +241,7 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
   `Column<T>[]`. Gating is not per-screen: the `(app)` layout's pre-paint script redirects to
   `/login` when the session flag is missing, and screens render their content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.
-- `components/Nav.tsx` links the 11 screens; it no longer filters by permission. A new screen →
+- `components/Nav.tsx` links the 12 screens; it no longer filters by permission. A new screen →
   add its entry to `LINKS` and a route under `app/(app)/`.
 - `DataTable` paginates client-side using the user's rows-per-page preference, so a screen does
   not manage paging state itself. The pager only appears when a table exceeds the page size.
@@ -254,7 +259,7 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls (22 / 63)
+npm run check          # check:env + check:rls (22 / 65)
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -265,12 +270,12 @@ RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies t
 and never `authenticated`, grants matching the policies, `authenticated` revoked everywhere,
 `DELETE` withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role
 arrays, and no `FOR ALL` catch-all. It also pins the `app_users` store to no policy, no grant,
-revoked from both roles, gated solely by the `login_user` EXECUTE grant. **It must fail loudly if
+revoked from both roles, gated solely by the SECURITY DEFINER function `EXECUTE` grants. **It must fail loudly if
 you reintroduce a role ladder or widen RLS to a `authenticated` split** — a guard that cannot
 fail is not a guard, so prove a new assertion by breaking the code it covers first.
 
 `check:gate` was the equivalent for `lib/adminGate.ts` and the two Admin Console routes; it was
-deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 63).
+deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 65).
 
 `npm run smoke` (`scripts/smoke-forms.mjs`) is the live counterpart and it is **destructive**: it
 truncates the nine data tables, then for every screen creates, reads back and edits one row through
@@ -296,6 +301,7 @@ curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/warehouses           
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/maintenance          # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/reports              # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/settings             # 200
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/users                # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/login               # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/admin/users          # 404
 curl.exe -s http://localhost:3000/api/supabase-test                             # 200 {"status":"ready",...}

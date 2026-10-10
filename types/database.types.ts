@@ -423,6 +423,28 @@ export interface Database {
           display_name: string | null
         }[]
       }
+      list_login_users: {
+        Args: Record<string, never>
+        Returns: {
+          username: string
+          display_name: string | null
+          created_at: string
+        }[]
+      }
+      create_login_user: {
+        Args: {
+          p_username: string
+          p_password: string
+          p_display_name: string | null
+        }
+        Returns: boolean
+      }
+      delete_login_user: {
+        Args: {
+          p_username: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
