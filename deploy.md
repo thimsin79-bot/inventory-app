@@ -169,13 +169,13 @@ Changing `regions` takes effect on the next deployment, and only for new deploym
 Run these locally before pushing:
 
 ```bash
-npm run check    # check:env + check:rls + check:gate, 22 / 57 / 22 assertions
+npm run check    # check:env + check:rls, 22 / 53 assertions
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-The build output should list the eleven app screens plus `/admin/users` as `○ Static` and the API
+The build output should list the eleven app screens as `○ Static` and the API
 routes as `ƒ (Dynamic)`.
 
 Then locally, with a dev server on `:3000`:
@@ -204,9 +204,8 @@ Checklist:
 
 - Locally `/` returns `200` with no redirect. A redirect to `/sign-in` would mean the session
   gate is back.
-- `/login`, `/signup`, `/auth/callback` and `/warehouses` all return `404` — those routes were
-  deleted. A `200` on any of them means a stale build. `/admin/users` returns `200`: the Admin
-  Console lives there now, behind its shared-secret lock.
+- `/login`, `/signup`, `/auth/callback`, `/warehouses` and `/admin/users` all return `404` —
+  those routes were deleted. A `200` on any of them means a stale build.
 - `/api/supabase-test` returns `"status":"ready"`. `unconfigured` means the env vars from step 3
   are missing or still placeholders; `connected_with_schema_missing` means the tables do not
   exist at all.
@@ -263,8 +262,7 @@ variable surfaces inside the running app instead of as a `503`:
 | --- | --- |
 | any app screen | `ErrorState` naming the missing or placeholder variable; the header badge reads `Supabase Not configured` |
 | `/api/supabase-test` | `200` with `"status":"unconfigured"` and the variable names in `details` |
-| `/login`, `/signup`, `/warehouses` | `404`; the routes no longer exist |
-| `/admin/users` | `200`; the Admin Console renders its lock screen, and unlocks only with the shared secret |
+| `/login`, `/signup`, `/warehouses`, `/admin/users` | `404`; the routes no longer exist |
 
 `lib/supabase/env.ts` treats a blank variable and an unedited `.env.example` as unconfigured. Both
 were previously read as valid: `KEY=` in an env file yields `''` rather than `undefined`, and

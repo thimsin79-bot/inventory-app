@@ -22,9 +22,9 @@ Hard rules for this repo:
   reintroduce an `authenticated`-only split or a `user_metadata` read without saying why.
 - All data access is client-side through `services/inventoryService.ts` with the publishable key;
   `anon` is granted every screen command and `authenticated` is revoked everywhere.
-- The Admin Console (moved 2026-10-09 to `app/admin/users`), its routes and the DB are gated one
-  way and one way only: `adminSecretGate` (shared secret). There is no second gate; do not re-add
-  `permissionCheck` unless a session layer exists again.
+- The Admin Console (`app/admin/users`) and its routes were removed 2026-10-10; there is no
+  gated surface left. Do not re-add `adminSecretGate`, `permissionCheck`, or a session layer
+  unless one is explicitly asked for.
 - Reuse the primitives in `components/ui.tsx` and follow the existing
   `useAsyncData` + `AsyncBoundary` screen pattern.
 - Never commit, echo, or paste keys. `.env*` is gitignored.
