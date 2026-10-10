@@ -117,3 +117,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.company_settings (id) VALUES (1)
 ON CONFLICT (id) DO NOTHING;
 
+-- App Users (login page). Username + password, no email. The password is stored
+-- as a bcrypt hash; to change it (or add users) run, e.g.:
+--   UPDATE public.app_users SET password_hash = crypt('newpass', gen_salt('bf'))
+--   WHERE username = 'admin';
+INSERT INTO public.app_users (username, password_hash, display_name) VALUES
+('admin', crypt('admin123', gen_salt('bf')), 'Administrator')
+ON CONFLICT (username) DO NOTHING;
+

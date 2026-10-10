@@ -12,6 +12,10 @@ the Vercel Git integration.
 > been removed a second time: `/sign-in`, `/sign-up`, the root `proxy.ts`, per-screen permission
 > gates and RLS-to-`authenticated` are gone. RLS is `TO anon`, every screen loads without a
 > session, and there is **no gated surface left** — the Admin Console was removed on 2026-10-10.
+> On the same day a standalone `/login` page was added (username + password, no email). It is a
+> page, not a session: it signs nobody in, gates nothing, and sets no cookie. Its credential
+> store, `app_users`, is deliberately invisible to PostgREST (RLS on, no anon policies/grants);
+> the only way in is the `login_user()` SECURITY DEFINER function (§3).
 > §3 describes the boundary; this file is the source of truth for it.
 
 ---
@@ -30,9 +34,12 @@ the Vercel Git integration.
   six screens that delete — items, maintenance, categories, suppliers, departments, warehouses);
   `authenticated` is revoked from every table; the `logos`
   bucket is public with read-all and anon upload policies; a PostgREST probe with the publishable
-  key returns rows.
+  key returns rows. The same day the `/login` credential store was added and applied live:
+  `app_users` (RLS on, zero policies, zero grants) plus the `login_user()` SECURITY DEFINER
+  function; verified over REST that `admin`/valid credentials → `{ok: true, display_name}`,
+  wrong credentials → `{ok: false}`, and any read of `app_users` itself is denied (HTTP 401).
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
-  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 53
+  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 63
   assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping and `check:rls` reads `supabase/schema.sql`. The session-and-permission check
   (`check:auth`) and the Admin Console gate check (`check:gate`) were deleted with their
@@ -46,6 +53,7 @@ the Vercel Git integration.
 app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
   (app)/                  the 11 app screens + shared sidebar shell
+  login/                  standalone username + password sign-in form (no session, no gating)
   maintenance/            Maintenance History log: create + delete
   reports/                read-only rollups: valuation, purchases, requests, maintenance
   settings/               company info (DB-backed, logo upload) + browser-only preferences
@@ -78,14 +86,15 @@ read the table).
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/requests`, `/audits`,
 `/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered
-static shells; data arrives on the client).
+static shells; data arrives on the client), plus `/login` — a standalone page outside the `(app)`
+shell that verifies a username + password against `app_users` and sets no session.
 `/sign-in`, `/sign-up`, `/warehouses`, `/transactions` and `/admin/users` 404.
 
 ---
 
 ## 3. Access control — the current boundary
 
-The app has no sign-in. Read this before touching RLS.
+The app has no sign-in. `/login` exists but is a page, not a layer. Read this before touching RLS.
 
 - **Data is public by design.** RLS is enabled on all ten tables but every policy is
   `TO anon USING (true)` / `WITH CHECK (true)`, and `anon` holds the grants the screens
@@ -93,7 +102,16 @@ The app has no sign-in. Read this before touching RLS.
   DELETE held on items and maintenance). Anyone who can reach
   PostgREST with the publishable key can read and write every row — that is this build's
   intended state: a school inventory tool with no accounts.
-- **There is no gated surface any more.** The Admin Console and its
+- **The one exception to "every table": `app_users`.** The `/login` credential store is
+  RLS-enabled with **no policies and no grants** (`check:rls` guards this), so PostgREST
+  cannot read it at all — password hashes never leave the database. The only entry point is
+  the `login_user(username, password)` function in `schema.sql`: a `SECURITY DEFINER` routine
+  with `SET search_path = public, extensions, pg_temp` that returns just `ok` + `display_name`
+  (`extensions` is on the path because pgcrypto lives there). The client calls it through
+  `supabase.rpc('login_user', …)` in `services/inventoryService.ts:loginUser`. This is **not**
+  a session layer and does not gate anything; if `/login` ever must gate screens, the boundary
+  to revisit is here plus the browser client key, not just a redirect.
+- **There is no gated surface.** The Admin Console and its
   `/api/admin/users*` handlers were removed on 2026-10-10: no `adminSecretGate`, no
   `ADMIN_CONSOLE_SECRET`, no `app_metadata` reads. Do not re-add `permissionCheck`,
   a `ScreenGate`, or a session layer unless one is explicitly asked for.
@@ -123,7 +141,9 @@ Eight of the ten tables use `TEXT` primary keys with no default, so ids are gene
 
 Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
-requests 7, audits 5, maintenance 5, company_settings 1.
+requests 7, audits 5, maintenance 5, company_settings 1, app_users 1
+(`admin`, bcrypt hash of `admin123` — change it by UPDATE in SQL; you will not find a
+hash-verification path in the client, only the `login_user` function).
 
 The live project holds none of those rows as of 2026-10-10: `npm run smoke` cleared all nine data
 tables (77 rows at the time) and kept only the `company_settings` row. Re-run
@@ -219,22 +239,23 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls (22 / 53)
+npm run check          # check:env + check:rls (22 / 63)
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-After touching `supabase/schema.sql`, `check:rls` matters most: all ten tables declared and
+After touching `supabase/schema.sql`, `check:rls` matters most: the ten data tables declared and
 RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies targeting `anon`
 and never `authenticated`, grants matching the policies, `authenticated` revoked everywhere,
 `DELETE` withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role
-arrays, and no `FOR ALL` catch-all. **It must fail loudly if you reintroduce a role ladder or
-widen RLS to a `authenticated` split** — a guard that cannot fail is not a guard, so prove a new
-assertion by breaking the code it covers first.
+arrays, and no `FOR ALL` catch-all. It also pins the `app_users` store to no policy, no grant,
+revoked from both roles, gated solely by the `login_user` EXECUTE grant. **It must fail loudly if
+you reintroduce a role ladder or widen RLS to a `authenticated` split** — a guard that cannot
+fail is not a guard, so prove a new assertion by breaking the code it covers first.
 
 `check:gate` was the equivalent for `lib/adminGate.ts` and the two Admin Console routes; it was
-deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 53).
+deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 63).
 
 `npm run smoke` (`scripts/smoke-forms.mjs`) is the live counterpart and it is **destructive**: it
 truncates the nine data tables, then for every screen creates, reads back and edits one row through
@@ -260,6 +281,7 @@ curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/warehouses           
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/maintenance          # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/reports              # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/settings             # 200
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/login               # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/admin/users          # 404
 curl.exe -s http://localhost:3000/api/supabase-test                             # 200 {"status":"ready",...}
 ```
@@ -274,10 +296,11 @@ authenticated CLI is needed there (§8).
 - `git push origin main` is the whole deploy. The Vercel Git integration is connected and builds
   automatically. Nothing in the repo configures it; `vercel.json` only sets `framework`, `regions`
   and security headers.
-- **There is no sign-in.** Anyone who reaches the deployed URL can use the app — the RLS policies
-  `TO anon` make the data readable and writable through the publishable key. Deployment Protection
-  (Vercel SSO) still 302s anonymous traffic, which is useful mid-migration but is **not** a data
-  boundary (§3). Ordinary staff reach the app simply by opening the URL.
+- **There is no sign-in — there is a login page.** `/login` exists (2026-10-10) and verifies an
+  admin username + password against `app_users`, but it signs nobody in and gates nothing; the RLS
+  policies `TO anon` make the data readable and writable through the publishable key regardless.
+  Deployment Protection (Vercel SSO) still 302s anonymous traffic, which is useful mid-migration
+  but is **not** a data boundary (§3). Ordinary staff reach the app simply by opening the URL.
 - **Tooling on this machine:** `gh` is installed but **not** authenticated. The `vercel` CLI **is**
   authenticated (device login as `thimsin79-8849`, 2026-10-08) and the project **is** linked —
   `.vercel/project.json` exists and `.gitignore` covers it. `vercel env ls/add/rm`, `vercel

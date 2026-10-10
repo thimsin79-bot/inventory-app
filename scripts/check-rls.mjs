@@ -13,7 +13,7 @@
  *
  * So it checks that:
  *
- *   - all ten tables are declared and all ten have RLS enabled
+ *   - all ten data tables are declared and all ten have RLS enabled
  *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
  *   - the policies target `anon` and never `authenticated`
  *   - `anon` is granted the same commands the policies cover
@@ -23,6 +23,13 @@
  *     plus company_settings (four total)
  *   - nothing from the removed role ladder survives (current_role, app_metadata)
  *   - no table is left readable through a `FOR ALL USING (true)` catch-all
+ *
+ * The one table deliberately left OUT of the anon boundary is `app_users`, the
+ * /login credential store. It is RLS-enabled with no policies and no grants, so
+ * PostgREST cannot read it; its only entry point is the SECURITY DEFINER
+ * `login_user()` function, which returns just ok + display_name. This file
+ * checks that exclusion stays airtight (no policy, no grant, both roles revoked)
+ * and that the function is the sole gate.
  *
  * Run with `npm run check:rls`.
  */
@@ -100,6 +107,9 @@ const TABLES = [
 /** Tables no screen deletes from, so DELETE is withheld at the grant. */
 const NO_DELETE = ['purchases', 'requests', 'audits', 'company_settings']
 
+/** The /login credential store. Deliberately outside the anon boundary. */
+const APP_USERS = 'app_users'
+
 let passed = 0
 let failed = 0
 
@@ -119,8 +129,8 @@ for (const table of TABLES) {
   check(`${table} has RLS enabled`, sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`))
 }
 check(
-  'ten tables are declared',
-  [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length,
+  'the ten data tables and the app_users store are the only tables declared',
+  [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length + 1,
 )
 
 console.log('policies cover every command for anon')
@@ -156,6 +166,18 @@ for (const table of NO_DELETE) {
   check(`${table} withholds DELETE`, !new RegExp(`GRANT[^;]*DELETE[^;]*ON public\\.${table} TO`).test(sql))
 }
 check('items keeps DELETE, the inventory screen deletes items', sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon'))
+
+console.log('app_users stays outside the anon boundary')
+check(`${APP_USERS} is declared`, sql.includes(`CREATE TABLE IF NOT EXISTS public.${APP_USERS}`))
+check(`${APP_USERS} has RLS enabled`, sql.includes(`ALTER TABLE public.${APP_USERS} ENABLE ROW LEVEL SECURITY`))
+check(`${APP_USERS} has no policies at all`, !new RegExp(`CREATE POLICY[^;]*ON public\\.${APP_USERS}`).test(sql))
+check(`${APP_USERS} is granted nothing to anyone`, !new RegExp(`GRANT(?! EXECUTE)[^;]*ON public\\.${APP_USERS}`).test(sql))
+check(`${APP_USERS} is revoked from anon`, sql.includes(`REVOKE ALL ON public.${APP_USERS} FROM anon`))
+check(`${APP_USERS} is revoked from authenticated`, sql.includes(`REVOKE ALL ON public.${APP_USERS} FROM authenticated`))
+check('login_user is the sole gate into app_users', sql.includes('FUNCTION public.login_user') && sql.includes('SECURITY DEFINER'))
+check('login_user owes its access to a deliberate EXECUTE grant', sql.includes('GRANT EXECUTE ON FUNCTION public.login_user(TEXT, TEXT) TO anon'))
+check('login_user is not executable by PUBLIC', sql.includes('REVOKE ALL ON FUNCTION public.login_user(TEXT, TEXT) FROM PUBLIC'))
+check('login_user returns only ok and display_name', sql.includes('RETURNS TABLE (ok BOOLEAN, display_name TEXT)'))
 
 console.log('the removed role ladder leaves nothing behind')
 // The teardown statements are allowed; what must not come back is a definition.

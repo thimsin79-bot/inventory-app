@@ -384,12 +384,45 @@ export interface Database {
         }
         Relationships: []
       }
+      app_users: {
+        Row: {
+          username: string
+          password_hash: string
+          display_name: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          username: string
+          password_hash: string
+          display_name?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          username?: string
+          password_hash?: string
+          display_name?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      login_user: {
+        Args: {
+          p_username: string
+          p_password: string
+        }
+        Returns: {
+          ok: boolean
+          display_name: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -556,3 +556,23 @@ export async function updateRequestStatus(id: string, status: string, client?: C
   return data
 }
 
+/**
+ * Verify a username/password pair against the `login_user` database function.
+ * The function returns just `ok` and a display name; password hashes never
+ * leave the database. The /login page is standalone -- it does not start a
+ * session or gate any screen.
+ */
+export async function loginUser(
+  username: string,
+  password: string,
+  client?: Client,
+): Promise<{ ok: boolean; display_name: string | null }> {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .rpc('login_user', { p_username: username, p_password: password })
+    .maybeSingle()
+
+  if (error) throw error
+  return { ok: data?.ok ?? false, display_name: data?.display_name ?? null }
+}
+

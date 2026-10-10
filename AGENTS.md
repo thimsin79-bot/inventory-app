@@ -20,6 +20,11 @@ Hard rules for this repo:
   the root `proxy.ts`, per-screen permission gates and RLS-to-`authenticated` are gone. RLS
   policies are `TO anon` and the app is public. Read CLAUDE.md §3 before touching RLS; do not
   reintroduce an `authenticated`-only split or a `user_metadata` read without saying why.
+- A standalone **`/login` page exists (added 2026-10-10)**: username + password, no email. It
+  signs nobody in, gates no screen, and sets no session — it only verifies against `app_users`
+  via the `login_user()` SECURITY DEFINER function. `app_users` must stay RLS-on with **no
+  policies and no grants**; `check:rls` enforces that. Do not turn `/login` into a gating layer
+  (redirects, cookies, session) without an explicit request.
 - All data access is client-side through `services/inventoryService.ts` with the publishable key;
   `anon` is granted every screen command and `authenticated` is revoked everywhere.
 - The Admin Console (`app/admin/users`) and its routes were removed 2026-10-10; there is no

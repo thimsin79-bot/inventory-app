@@ -161,6 +161,69 @@ CREATE TABLE IF NOT EXISTS public.company_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- ==============================================================================
+-- App Users (login)
+-- ==============================================================================
+-- Credential store for the /login screen, which asks for a username and a
+-- password (no email). Added 2026-10-10 on explicit request; it is a standalone
+-- login page -- it signs nobody in, gates no screen, and sets no session -- so
+-- it does NOT change the public/anon boundary. What it does move is the
+-- password: `password_hash` is a bcrypt hash and the table is deliberately
+-- invisible to PostgREST (RLS enabled, no policies, no grants), so hashes can
+-- never be read over the API. The only way in is the SECURITY DEFINER
+-- `login_user()` function below, which returns just a boolean and the display
+-- name. New users / password changes are done in SQL:
+--
+--   INSERT INTO public.app_users (username, password_hash, display_name)
+--   VALUES ('name', crypt('plaintext', gen_salt('bf')), 'Display Name');
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS public.app_users (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    display_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Verifies a username/password pair. SECURITY DEFINER so it reads `app_users`
+-- with the definer's rights (bypassing RLS), which is safe here precisely
+-- because the function's entire surface is one boolean and a display name --
+-- nothing from the table leaves the server. `search_path` is pinned so the
+-- definer's privileges cannot be redirected onto an attacker-controlled
+-- function; `extensions` is included because pgcrypto's crypt()/gen_salt()
+-- live there on Supabase, not in `public`. Calls come from the client via
+-- `supabase.rpc('login_user', ...)`.
+CREATE OR REPLACE FUNCTION public.login_user(p_username TEXT, p_password TEXT)
+RETURNS TABLE (ok BOOLEAN, display_name TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    stored TEXT;
+    name TEXT;
+BEGIN
+    SELECT app.password_hash, app.display_name INTO stored, name
+    FROM public.app_users app
+    WHERE app.username = p_username;
+
+    IF stored IS NULL THEN
+        RETURN QUERY SELECT FALSE, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    IF crypt(p_password, stored) = stored THEN
+        RETURN QUERY SELECT TRUE, name;
+    ELSE
+        RETURN QUERY SELECT FALSE, NULL::TEXT;
+    END IF;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.login_user(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.login_user(TEXT, TEXT) TO anon;
+
 -- Logo storage. A public bucket so the logo serves without a signed URL; the
 -- Settings screen uploads with the anon role, and the policies below are the
 -- whole storage story for this bucket. The bucket insert is idempotent.
@@ -208,20 +271,24 @@ ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
+-- `app_users` also has RLS enabled; it is deliberately NOT in the policy loop
+-- below (see the App Users section), so it has no anon policies at all.
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
 -- Policies
 -- ==============================================================================
 -- The app talks to the database with the public (publishable) key, and there is
--- no sign-in layer any more, so PostgREST presents every request as the `anon`
--- role. RLS stays enabled and the policies below are the whole truth about row
--- access: `TO anon USING (true)` / `WITH CHECK (true)` make the tables readable
+-- no sign-in layer any more (only the standalone /login page, which sets no
+-- session), so PostgREST presents every request as the `anon` role. RLS stays
+-- enabled and the policies below are the whole truth about row access:
+-- `TO anon USING (true)` / `WITH CHECK (true)` make the data tables readable
 -- and writable by anyone holding the publishable key, which is the intended
--- state of this build -- the Admin Console is the only gated part of the app,
--- and it is gated by the shared secret in the API layer, not here.
+-- state of this build. The single exception is `app_users`, which is not in
+-- `all_tables` below on purpose: its only access is the `login_user()` function.
 --
 -- One policy per table per command -- four per table, generated rather than
--- written out longhand because ten tables times four commands is forty
+-- written out longhand because ten data tables times four commands is forty
 -- statements to keep in step. Policy names are unique per table, so the three
 -- write policies cannot share one name; each carries its command:
 --
@@ -317,6 +384,10 @@ REVOKE ALL ON public.requests FROM anon;
 REVOKE ALL ON public.audits FROM anon;
 REVOKE ALL ON public.maintenance FROM anon;
 REVOKE ALL ON public.company_settings FROM anon;
+-- `app_users` gets no grants at all -- being revoked here on top of RLS-with-
+-- no-policies is what makes the table invisible to PostgREST. The only entry
+-- point is the EXECUTE grant on `login_user` in the App Users section.
+REVOKE ALL ON public.app_users FROM anon;
 
 REVOKE ALL ON public.categories FROM authenticated;
 REVOKE ALL ON public.suppliers FROM authenticated;
@@ -328,6 +399,7 @@ REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
 REVOKE ALL ON public.maintenance FROM authenticated;
 REVOKE ALL ON public.company_settings FROM authenticated;
+REVOKE ALL ON public.app_users FROM authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
