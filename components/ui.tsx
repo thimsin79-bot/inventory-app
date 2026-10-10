@@ -83,10 +83,10 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
 export function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase()
   let tone: 'neutral' | 'good' | 'warn' | 'bad' | 'info' = 'neutral'
-  if (['active', 'received', 'approved', 'issued', 'matched', 'returned', 'adjusted'].includes(s)) tone = 'good'
-  else if (['pending', 'partial'].includes(s)) tone = 'warn'
+  if (['active', 'received', 'approved', 'issued', 'matched', 'returned', 'adjusted', 'completed'].includes(s)) tone = 'good'
+  else if (['pending', 'partial', 'in progress'].includes(s)) tone = 'warn'
   else if (['out of stock', 'rejected', 'low stock'].includes(s)) tone = 'bad'
-  else if (['transfer', 'adjustment'].includes(s)) tone = 'info'
+  else if (['transfer', 'adjustment', 'scheduled'].includes(s)) tone = 'info'
   return <Badge tone={tone}>{status}</Badge>
 }
 

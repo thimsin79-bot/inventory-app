@@ -23,7 +23,7 @@ consciously decided. Nothing below — environment variables, schema, headers �
 
 The app holds exactly one credential: the Supabase publishable key, which ships to the browser by
 design. Every database request therefore reaches PostgREST as the `anon` role, and
-`supabase/schema.sql` grants `anon` read and write on all nine tables. Those grants exist so the
+`supabase/schema.sql` grants `anon` read and write on all ten tables. Those grants exist so the
 app functions; they are **not** a security boundary, and row level security cannot tighten them,
 because there is no identity for it to check.
 
@@ -94,7 +94,7 @@ app.
 Paste the whole file into the Supabase dashboard → **SQL Editor** → new query and run it. It is
 re-runnable: it drops its own policies by name, retires the older role-ladder and public-access
 policies, drops `private.current_role()` and the `private` schema itself, then generates
-`TO anon USING (true)` / `WITH CHECK (true)` policies on all nine tables and grants `anon`
+`TO anon USING (true)` / `WITH CHECK (true)` policies on all ten tables and grants `anon`
 SELECT, INSERT, UPDATE and DELETE.
 
 **No script in the repo executes SQL.** There is no migration runner and no CLI step; nothing in
@@ -173,13 +173,13 @@ Changing `regions` takes effect on the next deployment, and only for new deploym
 Run these locally before pushing:
 
 ```bash
-npm run check    # check:env + check:rls + check:gate, 22 / 50 / 22 assertions
+npm run check    # check:env + check:rls + check:gate, 22 / 53 / 22 assertions
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-The build output should list the nine app screens plus `/admin/users` as `○ Static` and the API
+The build output should list the eleven app screens plus `/admin/users` as `○ Static` and the API
 routes as `ƒ (Dynamic)`.
 
 Then locally, with a dev server on `:3000`:

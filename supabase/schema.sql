@@ -139,6 +139,25 @@ CREATE TABLE IF NOT EXISTS public.audits (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- 11. Maintenance History
+-- A simple log of servicing and repairs: who/what was maintained, when, and at
+-- what cost. It is not tied to `items` by a foreign key -- the log keeps its own
+-- item text so a record survives an item being renamed or deleted.
+CREATE TABLE IF NOT EXISTS public.maintenance (
+    id TEXT PRIMARY KEY,
+    item_name TEXT NOT NULL,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    description TEXT,
+    cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    status TEXT NOT NULL DEFAULT 'Completed',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- PostgREST caches the schema it exposes; without this the API keeps answering
+-- "Could not find the table 'public.maintenance' in the schema cache" until its
+-- next automatic reload, even though the table exists.
+NOTIFY pgrst, 'reload schema';
+
 -- ==============================================================================
 -- Indexes for Performance
 -- ==============================================================================
@@ -148,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_items_warehouse ON public.items (warehouse_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_barcode ON public.transactions (item_barcode);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions (date);
 CREATE INDEX IF NOT EXISTS idx_requests_date ON public.requests (date);
+CREATE INDEX IF NOT EXISTS idx_maintenance_date ON public.maintenance (date);
 
 -- ==============================================================================
 -- Row Level Security (RLS) & Policies
@@ -161,6 +181,7 @@ ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================================================
 -- Policies
@@ -174,7 +195,7 @@ ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 -- and it is gated by the shared secret in the API layer, not here.
 --
 -- One policy per table per command -- four per table, generated rather than
--- written out longhand because nine tables times four commands is thirty-six
+-- written out longhand because ten tables times four commands is forty
 -- statements to keep in step. Policy names are unique per table, so the three
 -- write policies cannot share one name; each carries its command:
 --
@@ -190,7 +211,7 @@ DO $policies$
 DECLARE
   all_tables text[] := ARRAY[
     'categories', 'suppliers', 'warehouses', 'departments',
-    'items', 'purchases', 'transactions', 'requests', 'audits'
+    'items', 'purchases', 'transactions', 'requests', 'audits', 'maintenance'
   ];
 
   t text;
@@ -268,6 +289,7 @@ REVOKE ALL ON public.purchases FROM anon;
 REVOKE ALL ON public.transactions FROM anon;
 REVOKE ALL ON public.requests FROM anon;
 REVOKE ALL ON public.audits FROM anon;
+REVOKE ALL ON public.maintenance FROM anon;
 
 REVOKE ALL ON public.categories FROM authenticated;
 REVOKE ALL ON public.suppliers FROM authenticated;
@@ -278,12 +300,17 @@ REVOKE ALL ON public.purchases FROM authenticated;
 REVOKE ALL ON public.transactions FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
 REVOKE ALL ON public.audits FROM authenticated;
+REVOKE ALL ON public.maintenance FROM authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.suppliers TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.warehouses TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.departments TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
+-- The Maintenance screen deletes records, so it keeps DELETE too. The log is
+-- append-only in spirit (a record of work done) but a mistyped entry is worth
+-- being able to remove.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.maintenance TO anon;
 
 -- The one limit beyond the anon/authenticated split: no screen deletes a
 -- purchase, transaction, request or audit, and `services/inventoryService.ts`

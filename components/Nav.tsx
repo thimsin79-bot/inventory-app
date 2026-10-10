@@ -10,9 +10,11 @@ const LINKS: { href: string; label: string }[] = [
   { href: '/transactions', label: 'Transactions' },
   { href: '/requests', label: 'Requests' },
   { href: '/audits', label: 'Audits' },
+  { href: '/maintenance', label: 'Maintenance' },
   { href: '/categories', label: 'Categories' },
   { href: '/suppliers', label: 'Suppliers' },
   { href: '/departments', label: 'Departments' },
+  { href: '/settings', label: 'Settings' },
   { href: '/admin/users', label: 'Admin console' },
 ]
 

@@ -110,3 +110,12 @@ INSERT INTO public.audits (id, warehouse, item_name, system_qty, physical_qty, d
 ('AUD-0014', 'IT Equipment Room', 'Dell Latitude Laptop', 7, 8, '2026-09-08', 'Pending')
 ON CONFLICT (id) DO NOTHING;
 
+-- Maintenance History
+INSERT INTO public.maintenance (id, item_name, date, description, cost, status) VALUES
+('MNT-00001', 'Epson Projector EB-X51', '2026-09-20', 'Lamp replaced and lens cleaned', 85.00, 'Completed'),
+('MNT-00002', 'Dell Latitude Laptop', '2026-09-24', 'Battery replaced under warranty', 0.00, 'Completed'),
+('MNT-00003', 'HP LaserJet Printer', '2026-09-30', 'Toner and pickup roller serviced', 45.50, 'In Progress'),
+('MNT-00004', 'Ceiling Fan', '2026-10-03', 'Bearing lubrication scheduled', 12.00, 'Scheduled'),
+('MNT-00005', 'Office Chair', '2026-09-18', 'Gas lift and casters repaired', 9.75, 'Completed')
+ON CONFLICT (id) DO NOTHING;
+

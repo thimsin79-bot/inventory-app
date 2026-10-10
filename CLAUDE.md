@@ -22,14 +22,14 @@ the Vercel Git integration.
 - **Supabase** `@supabase/ssr` + `@supabase/supabase-js` (the latter only for the `SupabaseClient` type)
 - Node v24.21.0, npm 11, path alias `@/*`
 - Supabase project `bktxzesvtmgcmznsfnlu` (`ap-southeast-2`).
-  **`supabase/schema.sql` was last run in full on 2026-10-09** through the Management API (§9) when
-  the RLS split was flipped back from `authenticated` to `anon`. Verified live the same day: 36
-  policies, every one `TO anon`; `anon` has the grants the file declares (DELETE withheld on
-  purchases, transactions, requests and audits); `authenticated` is revoked from every table;
-  a PostgREST probe with the publishable key returns rows. Data was not touched.
+  **`supabase/schema.sql` was last run in full on 2026-10-10** through the Management API (§9),
+  when the maintenance table joined. Verified live the same day: 40 policies across ten tables,
+  every one `TO anon`; `anon` has the grants the file declares (DELETE withheld on purchases,
+  transactions, requests and audits; DELETE held on items and maintenance); `authenticated` is
+  revoked from every table; a PostgREST probe with the publishable key returns rows.
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
   test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` + `check:gate`
-  (22 / 50 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
+  (22 / 53 / 22 assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping, `check:rls` reads `supabase/schema.sql`, `check:gate` imports `lib/adminGate.ts` and
   reads the two Admin Console routes as source. Then `npm run lint`, `npx tsc --noEmit`,
   `npm run build`. The session-and-permission check (`check:auth`) was deleted with the auth layer.
@@ -40,17 +40,21 @@ the Vercel Git integration.
 
 ```
 app/
-  layout.tsx              root: Geist fonts, metadata, suppressHydrationWarning
-  (app)/                  the 9 app screens + shared sidebar shell
+  layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
+  (app)/                  the 11 app screens + shared sidebar shell
+  maintenance/            Maintenance History log: create + delete
+  settings/               browser-only user preferences (theme, landing page, rows per page)
   admin/layout.tsx        Admin Console shell: full-width main, "Back to the app" link
   admin/users/            the Admin Console page (moved here 2026-10-09)
   api/supabase-test/      connection diagnostic (public)
   api/admin/users/        Admin Console handlers: adminSecretGate only, then lib/adminAuth
-components/               flat: ui.tsx, Nav, DataTable, Modal, forms, ConnectionStatus,
-                          PermissionPicker, MovementForm, ItemFormFields
+components/               flat: ui.tsx, Nav, DataTable (paginates per preference), Modal, forms,
+                          ConnectionStatus, PermissionPicker, MovementForm, ItemFormFields,
+                          PreferencesProvider, LandingRedirect
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
 lib/supabase/             client.ts, server.ts, env.ts
 lib/permissions.ts        permission catalog for the Admin Console picker (stored, not enforced)
+lib/preferences.ts        browser-only preference storage + theme resolution (no server usage)
 lib/adminAuth.ts          server-only Auth-user CRUD over the Management API (reads SUPABASE_ACCESS_TOKEN)
 lib/adminGate.ts          the Admin Console shared-secret gate: x-admin-secret vs ADMIN_CONSOLE_SECRET, 401/503
 services/inventoryService.ts   all data access, browser Supabase client
@@ -71,9 +75,9 @@ the root `proxy.ts`, `lib/{auth.ts,permissionGate.ts}`, `lib/supabase/session.ts
 read the table).
 
 **Screens:** `/`, `/inventory`, `/purchases`, `/transactions`, `/requests`, `/audits`,
-`/categories`, `/suppliers`, `/departments` (prerendered static shells; data arrives on the
-client), and the Admin Console `/admin/users` (own shell, top-level). `/sign-in`, `/sign-up` and
-`/warehouses` 404.
+`/maintenance`, `/categories`, `/suppliers`, `/departments`, `/settings` (prerendered static
+shells; data arrives on the client), and the Admin Console `/admin/users` (own shell, top-level).
+`/sign-in`, `/sign-up` and `/warehouses` 404.
 
 ---
 
@@ -81,9 +85,10 @@ client), and the Admin Console `/admin/users` (own shell, top-level). `/sign-in`
 
 The app has no sign-in. Read this before touching RLS or the Admin routes.
 
-- **Data is public by design.** RLS is enabled on all nine tables but every policy is
+- **Data is public by design.** RLS is enabled on all ten tables but every policy is
   `TO anon USING (true)` / `WITH CHECK (true)`, and `anon` holds the grants the screens
-  issue (DELETE withheld on purchases, transactions, requests, audits). Anyone who can reach
+  issue (DELETE withheld on purchases, transactions, requests, audits; DELETE held on
+  items and maintenance). Anyone who can reach
   PostgREST with the publishable key can read and write every row — that is this build's
   intended state: a school inventory tool with no accounts.
 - **The Admin Console is the one gated surface.** Both `/api/admin/users*` handlers call
@@ -116,13 +121,13 @@ Consequences, stated honestly:
 
 ## 4. Database
 
-Eight of the nine tables use `TEXT` primary keys with no default, so ids are generated in
+Nine of the ten tables use `TEXT` primary keys with no default, so ids are generated in
 `services/inventoryService.ts:17` (`nextId(prefix, length)` → `TXN000123`, `PO-20260001`, `AUD00042`,
-`REQ00017`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
+`REQ00017`, `MNT00001`). `items` is the exception: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`.
 
-Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-09 after the RLS re-flip):
+Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
-transactions 7, requests 7, audits 5.
+transactions 7, requests 7, audits 5, maintenance 5.
 
 All reads and writes go through the **browser** Supabase client (`services/inventoryService.ts`)
 with the publishable key, which is exactly why the RLS policies target `anon`.
@@ -168,16 +173,25 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 
 ## 6. Conventions
 
-- No semicolons, single quotes, 2-space indent. (`app/layout.tsx` is the only scaffold holdout.)
-- Tailwind `zinc` palette with light and dark variants on every element.
+- No semicolons, single quotes, 2-space indent. (`app/layout.tsx` was the scaffold holdout; it was
+  rewritten in the same style when the preferences provider was added.)
+- Tailwind `zinc` palette with light and dark variants on every element. Dark mode is a `.dark`
+  class on `<html>` (Tailwind v4 `@custom-variant`), not the OS media query: the theme init script
+  in the root layout and `preferences.theme` decide it. Keep that script and `resolveTheme` in
+  `lib/preferences.ts` in sync.
 - Reuse `components/ui.tsx` (`Card`, `Button`, `Label`, `Input`, `Select`, `Textarea`, `Badge`,
   `StatusBadge`, `PageHeader`, `Spinner`, `EmptyState`, `ErrorState`) rather than adding new
   primitives.
 - Client screens follow the `useAsyncData` + `AsyncBoundary` + `DataTable` pattern with
   `Column<T>[]`. There is no `ScreenGate`: a screen renders its content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.
-- `components/Nav.tsx` links the 9 screens plus `Admin console` (→ `/admin/users`); it no longer
+- `components/Nav.tsx` links the 11 screens plus `Admin console` (→ `/admin/users`); it no longer
   filters by permission. A new screen → add its entry to `LINKS` and a route under `app/(app)/`.
+- `DataTable` paginates client-side using the user's rows-per-page preference, so a screen does
+  not manage paging state itself. The pager only appears when a table exceeds the page size.
+- Browser preferences live in `lib/preferences.ts` (types, storage, theme resolution) and are
+  applied by `components/PreferencesProvider.tsx`, mounted once in the root layout. They never
+  touch the database; Settings is the only UI for them.
 - `lib/permissions.ts` keeps the `<screen>.view`/`<screen>.manage` catalog only for the Admin
   Console's `PermissionPicker`; it decides nothing at runtime.
 - Forms dispatch through the browser Supabase client in `services/inventoryService.ts`.
@@ -190,13 +204,13 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls + check:gate (22 / 50 / 22)
+npm run check          # check:env + check:rls + check:gate (22 / 53 / 22)
 npm run lint
 npx tsc --noEmit
 npm run build
 ```
 
-After touching `supabase/schema.sql`, `check:rls` matters most: all nine tables declared and
+After touching `supabase/schema.sql`, `check:rls` matters most: all ten tables declared and
 RLS-enabled, SELECT/INSERT/UPDATE/DELETE policies generated for each, policies targeting `anon`
 and never `authenticated`, grants matching the policies, `authenticated` revoked everywhere,
 `DELETE` withheld on the four tables nothing deletes from, no `current_role`/`app_metadata`/role
@@ -221,6 +235,8 @@ curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/                     
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/sign-in              # 404
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/sign-up              # 404
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/warehouses           # 404
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/maintenance          # 200
+curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/settings             # 200
 curl.exe -s -o NUL -w "%{http_code}" http://localhost:3000/admin/users          # 200 (lock screen)
 curl.exe -s http://localhost:3000/api/supabase-test                             # 200 {"status":"ready",...}
 ```

@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 import { Nav } from '@/components/Nav'
 import { ConnectionStatus } from '@/components/ConnectionStatus'
+import { LandingRedirect } from '@/components/LandingRedirect'
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col lg:flex-row">
+      <LandingRedirect />
       <aside className="border-b border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40 lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col px-4 py-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-3">

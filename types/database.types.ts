@@ -360,6 +360,36 @@ export interface Database {
         }
         Relationships: []
       }
+      maintenance: {
+        Row: {
+          id: string
+          item_name: string
+          date: string
+          description: string | null
+          cost: number
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          item_name: string
+          date?: string
+          description?: string | null
+          cost?: number
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          item_name?: string
+          date?: string
+          description?: string | null
+          cost?: number
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

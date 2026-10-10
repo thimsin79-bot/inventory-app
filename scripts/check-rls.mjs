@@ -13,7 +13,7 @@
  *
  * So it checks that:
  *
- *   - all nine tables are declared and all nine have RLS enabled
+ *   - all ten tables are declared and all ten have RLS enabled
  *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
  *   - the policies target `anon` and never `authenticated`
  *   - `anon` is granted the same commands the policies cover
@@ -93,6 +93,7 @@ const TABLES = [
   'transactions',
   'requests',
   'audits',
+  'maintenance',
 ]
 
 /** Tables no screen deletes from, so DELETE is withheld at the grant. */
@@ -117,7 +118,7 @@ for (const table of TABLES) {
   check(`${table} has RLS enabled`, sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`))
 }
 check(
-  'nine tables are declared',
+  'ten tables are declared',
   [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length,
 )
 

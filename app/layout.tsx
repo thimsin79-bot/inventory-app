@@ -1,30 +1,37 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Geist, Geist_Mono } from 'next/font/google'
+import './globals.css'
+import { PreferencesProvider } from '@/components/PreferencesProvider'
+import { THEME_INIT_SCRIPT } from '@/lib/preferences'
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+})
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+})
 
 export const metadata: Metadata = {
-  title: "Inventory Management",
-  description: "Track stock levels, purchases, requisitions and audits across warehouses.",
-};
+  title: 'Inventory Management',
+  description: 'Track stock levels, purchases, requisitions and audits across warehouses.',
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Applies the stored theme before first paint; must stay in sync with
+            resolveTheme in lib/preferences.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <PreferencesProvider>{children}</PreferencesProvider>
+      </body>
     </html>
-  );
+  )
 }

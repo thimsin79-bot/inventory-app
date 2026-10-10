@@ -323,6 +323,49 @@ export async function createAudit(audit: Inserts<'audits'>, client?: Client) {
 }
 
 /**
+ * Fetch maintenance history records
+ */
+export async function getMaintenance(client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('maintenance')
+    .select('*')
+    .order('date', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Create a maintenance history record
+ */
+export async function createMaintenance(record: Inserts<'maintenance'>, client?: Client) {
+  const supabase = getClient(client)
+  const { data, error } = await supabase
+    .from('maintenance')
+    .insert({ id: nextId('MNT', 5), ...record })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete a maintenance history record
+ */
+export async function deleteMaintenance(id: string, client?: Client) {
+  const supabase = getClient(client)
+  const { error } = await supabase
+    .from('maintenance')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+  return true
+}
+
+/**
  * Create a requisition request
  */
 export async function createRequest(request: Inserts<'requests'>, client?: Client) {
