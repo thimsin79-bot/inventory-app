@@ -14,6 +14,7 @@ import {
 } from '@/services/inventoryService'
 import type { Tables, Inserts } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
+import { formatDate } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -31,6 +32,7 @@ import { MovementForm } from '@/components/MovementForm'
 type ItemRow = Tables<'items'> & {
   category: Tables<'categories'> | null
   warehouse: Tables<'warehouses'> | null
+  supplier: Tables<'suppliers'> | null
 }
 
 export default function InventoryPage() {
@@ -147,6 +149,22 @@ export default function InventoryPage() {
     { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{Number(r.cost).toFixed(2)}</span> },
     { key: 'price', header: 'Price', render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
+    { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
+    {
+      key: 'serial',
+      header: 'Serial No.',
+      render: (r) =>
+        r.serial_number ? <span className="font-mono text-xs">{r.serial_number}</span> : <span className="text-zinc-400">—</span>,
+    },
+    {
+      key: 'purchase_date',
+      header: 'Date of Purchase',
+      render: (r) => (r.purchase_date ? formatDate(r.purchase_date) : <span className="text-zinc-400">—</span>),
+    },
+    { key: 'supplier', header: 'Supplier', render: (r) => r.supplier?.company ?? <span className="text-zinc-400">—</span> },
+    { key: 'dept', header: 'Department / Location', render: (r) => r.department_location ?? <span className="text-zinc-400">—</span> },
+    { key: 'remark', header: 'User Remark', render: (r) => r.remark ?? <span className="text-zinc-400">—</span> },
   ]
 
   columns.push({

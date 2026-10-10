@@ -37,7 +37,8 @@ export async function getInventoryItems(client?: Client, options?: {
     .select(`
       *,
       category:categories(*),
-      warehouse:warehouses(*)
+      warehouse:warehouses(*),
+      supplier:suppliers(*)
     `)
     .order('name', { ascending: true })
 
