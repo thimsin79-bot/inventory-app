@@ -80,8 +80,8 @@ the company-settings table and the `logos` storage bucket joined. The live polic
 bucket match the file. It still has to be run by hand after any change — nothing in the app
 executes SQL.
 
-The seed rows this project once had are gone until `supabase/seed.sql` runs. Run it too if you
-want a populated app.
+The seed rows this project once had are gone until `supabase/seed.sql` runs — `npm run smoke`
+cleared them on 2026-10-10. Run it too if you want a populated app.
 
 Paste the whole file into the Supabase dashboard → **SQL Editor** → new query and run it. It is
 re-runnable: it drops its own policies by name, retires the older role-ladder and public-access
@@ -236,6 +236,11 @@ is working as intended. Verify locally instead, or use a browser signed in to th
 
 **`totalItemsInDb` is far lower than expected.** The database is genuinely under-seeded;
 `/api/supabase-test` counts real rows. Re-apply `supabase/seed.sql`.
+
+**Every screen is empty after `npm run smoke`.** Expected — the script starts by truncating all
+ten data tables (it prints that it is destructive and shows the counts it removed) so each screen's
+table and form are exercised from a clean slate, and it keeps only `company_settings`. Run
+`supabase/seed.sql` to bring the sample data back.
 
 **A variable exists but the deployment cannot see it.** It was set only in `.env.local`, which
 Vercel never reads. Set it in the project environment settings, then rebuild — `NEXT_PUBLIC_*`

@@ -132,6 +132,10 @@ Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
 transactions 7, requests 7, audits 5, maintenance 5, company_settings 1.
 
+The live project holds none of those rows as of 2026-10-10: `npm run smoke` cleared all ten data
+tables (77 rows at the time) and kept only the `company_settings` row. Re-run
+`supabase/seed.sql` to bring the sample data back.
+
 All reads and writes go through the **browser** Supabase client (`services/inventoryService.ts`)
 with the publishable key, which is exactly why the RLS policies target `anon`.
 
@@ -237,6 +241,16 @@ assertion by breaking the code it covers first.
 handler gates before `lib/adminAuth`, the header name agrees between client and server, nothing
 outside `lib/adminGate.ts` reads `ADMIN_CONSOLE_SECRET`, and no `permissionCheck` crept back in
 the ordering assertions.
+
+`npm run smoke` (`scripts/smoke-forms.mjs`) is the live counterpart and it is **destructive**: it
+truncates the ten data tables, then for every screen creates, reads back and edits one row through
+the publishable key using the exact payload that screen's form submits, checks the column defaults
+the forms rely on (`unit`, `status`, `cost`, `min_qty`), checks the DELETE split — withheld on
+`purchases`, `transactions`, `requests`, `audits` and `company_settings` — writes the Settings row
+back with its own values, and truncates again so the run leaves nothing behind. 83 assertions, all
+green on 2026-10-10. It reads `.env.local` (`SUPABASE_ACCESS_TOKEN`) and is deliberately **not** in
+`npm run check`: never wire a truncating script into the check suite. Restore data with
+`supabase/seed.sql`.
 
 If you see `TS2307 Cannot find module '...app/(auth)/...'` from `.next/*/types/validator.ts`, those
 are stale generated route validators from a previous `next dev`. `Remove-Item -Recurse -Force .next`
