@@ -19,7 +19,7 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Input, Notice, PageHeader, Select, StatusBadge, Badge } from '@/components/ui'
+import { Button, Card, EmptyState, Input, Notice, PageHeader, Select, Badge } from '@/components/ui'
 import {
   EMPTY_ITEM,
   ItemFormFields,
@@ -133,22 +133,8 @@ export default function InventoryPage() {
       header: 'Barcode',
       render: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
     },
-    { key: 'name', header: 'Name', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.name}</span> },
+    { key: 'name', header: 'Item Name', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.name}</span> },
     { key: 'category', header: 'Category', render: (r) => r.category?.name ?? <span className="text-zinc-400">—</span> },
-    { key: 'warehouse', header: 'Warehouse', render: (r) => r.warehouse?.name ?? <span className="text-zinc-400">—</span> },
-    {
-      key: 'qty',
-      header: 'On hand',
-      render: (r) => (
-        <span className={r.qty <= r.min_qty ? 'font-semibold text-amber-700 dark:text-amber-400' : ''}>
-          {r.qty} {r.unit}
-        </span>
-      ),
-    },
-    { key: 'min', header: 'Min', render: (r) => <span className="text-zinc-500">{r.min_qty}</span> },
-    { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{Number(r.cost).toFixed(2)}</span> },
-    { key: 'price', header: 'Price', render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span> },
-    { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
     { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
     {
@@ -157,6 +143,16 @@ export default function InventoryPage() {
       render: (r) =>
         r.serial_number ? <span className="font-mono text-xs">{r.serial_number}</span> : <span className="text-zinc-400">—</span>,
     },
+    {
+      key: 'qty',
+      header: 'Quantity',
+      render: (r) => (
+        <span className={r.qty <= r.min_qty ? 'font-semibold text-amber-700 dark:text-amber-400' : ''}>
+          {r.qty} {r.unit}
+        </span>
+      ),
+    },
+    { key: 'price', header: 'Unit Price', render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span> },
     {
       key: 'purchase_date',
       header: 'Date of Purchase',
