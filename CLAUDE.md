@@ -41,6 +41,10 @@ the Vercel Git integration.
   `app_users` (RLS on, zero policies, zero grants) plus the `login_user()` SECURITY DEFINER
   function; verified over REST that `admin`/valid credentials → `{ok: true, display_name}`,
   wrong credentials → `{ok: false}`, and any read of `app_users` itself is denied (HTTP 401).
+  Later the same day the Users screen's other three functions (`list_login_users`,
+  `create_login_user`, `delete_login_user`) were applied live and verified over REST too —
+  create → true, duplicate username → false, password under 4 chars → false, list yields only
+  `username`/`display_name`/`created_at`, delete → true (§5 item 10).
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
   test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 65
   assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
@@ -61,10 +65,13 @@ app/
                           `inventory.signedIn` localStorage flag and opens the app; failed
                           sign-ins stay on this page
   maintenance/            Maintenance History log: create + delete
-  reports/                read-only rollups: valuation, purchases, requests, maintenance
+  reports/                read-only rollups: valuation, purchases, requests, maintenance;
+                          Print report button strips the shell and prints just the table
   settings/               company info (DB-backed, logo upload) + browser-only preferences
+  users/                  login accounts: create, list, delete via the login_user function family
   api/supabase-test/      connection diagnostic (public)
-components/               flat: ui.tsx, Nav (links + Sign out), DataTable (paginates per preference), Modal, forms,
+components/               flat: ui.tsx, Nav (links + Sign out), DataTable (cards on phones, table on sm+,
+                          paginates per preference), Modal, forms,
                           ConnectionStatus, MovementForm, ItemFormFields,
                           PreferencesProvider, LandingRedirect
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
@@ -217,6 +224,19 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
    the variable and by `runSql` trimming the token. An env change only reaches the site on a new
    deployment (`vercel redeploy <url>`), and deployment-specific URLs serve their frozen build.
    Only `https://inventory-app-thimsin.vercel.app` serves the current build.
+10. **Closed 2026-10-10 — the Users screen is in the app and management is live.** Asks were "New
+    Users screen" + "Add list + delete", so `app/(app)/users` lists every `app_users` account and
+    creates/deletes through the three SECURITY DEFINER functions (§3), never via table grants, and
+    hashes are never returned (confirms at rest even a `list_login_users` caller can't see a hash).
+    Live-verified over REST. Shipped as `d99c8d0`.
+11. **Closed 2026-10-10 — Reports has a print function.** "Add function print report": a Print
+    report button on `/reports` (`window.print()`) prints just the selected table. Print CSS =
+    Tailwind `print:` variants (`print:hidden` shell/tiles/picker, `print:block` title with the
+    `beforeprint`-stamped date, §6) plus ink-on-white in `app/globals.css`. Shipped as `e651cb9`.
+12. **Closed 2026-10-10 — DataTable is responsive with no horizontal scroll.** Per the
+    "cards instead of tables on phones" ask, rows below `sm` stack as label/value cards
+    (`sm:hidden`) and the real table renders on `sm+` (`hidden sm:block`) — one change in
+    `components/DataTable.tsx` covers ~13 tables. Shipped as `2734692`.
 
 ---
 
@@ -244,7 +264,15 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 - `components/Nav.tsx` links the 12 screens; it no longer filters by permission. A new screen →
   add its entry to `LINKS` and a route under `app/(app)/`.
 - `DataTable` paginates client-side using the user's rows-per-page preference, so a screen does
-  not manage paging state itself. The pager only appears when a table exceeds the page size.
+  not manage paging state itself. The pager only appears when a table exceeds the page size. It
+  is responsive by default: below `sm` each row stacks as a label/value card; on `sm+` the real
+  table renders — no screen opts in or out, so every table gets mobile cards for free.
+- **Printing (Reports):** use the Tailwind `print:` variant — `print:hidden` on chrome (sidebar,
+  page header, stat tiles, report picker) and a print-only title (`hidden print:block`).
+  `app/globals.css` forces ink-on-white for paper. Stamp dynamic values like the generated date
+  with a `beforeprint` listener writing into a ref — never render state, and never `new Date()`
+  in JSX: `useEffect` + `setState` trips `react-hooks/set-state-in-effect`, and a Date in render
+  mismatches the prerendered static HTML. The Reports print header takes exactly this path.
 - Browser preferences live in `lib/preferences.ts` (types, storage, theme resolution) and are
   applied by `components/PreferencesProvider.tsx`, mounted once in the root layout. They never
   touch the database. Company information (name/address/contact/logo) is the one DB-backed part
@@ -310,6 +338,15 @@ curl.exe -s http://localhost:3000/api/supabase-test                             
 Production is behind Vercel Deployment Protection, so plain curl gets a SSO redirect; the
 authenticated CLI is needed there (§8).
 
+Most screen content now renders inside a client-side `AsyncBoundary`, so a feature's markup is
+usually **not** in the prerendered HTML: the Reports **Print report** button and the DataTable's
+mobile-card layout only exist in the JS/CSS chunks. Grep the page's JS chunk (e.g.
+`vercel curl https://…/_next/static/immutable/chunks/<chunk>.js`) for `Print report` /
+`beforeprint` / `space-y-3` and the CSS chunk for `@media print`. The shell pieces that DO appear
+in static HTML are the layout-level classes (`print:hidden` on the aside, `print:px-0` on main),
+so a changed prerequisite like a bit-copied class list can be confirmed without JS. (Verified this
+way for the `e651cb9` and `2734692` deploys.)
+
 ---
 
 ## 8. Deployment
@@ -371,7 +408,7 @@ authenticated CLI is needed there (§8).
   server-only variable above (`SUPABASE_ACCESS_TOKEN`) is the one that must never get the prefix.
 - **A pasted env value can arrive with a UTF-8 BOM (U+FEFF)** in front of it, which is invisible in
   a dashboard and fatal in a header: `fetch` throws `Cannot convert argument to a ByteString … 65279`
-  at index 7 of `Bearer <token>` (§5 item 10). Write the file with Node rather than pasting, prefer
+  at index 7 of `Bearer <token>` (§5 item 9). Write the file with Node rather than pasting, prefer
   `vercel env add NAME env < file` over a PowerShell pipe, and the code trims anyway.
 - **Auth-account management is SQL-only now.** The Admin Console and `lib/adminAuth.ts` are gone,
   so any change to `auth.users` / `auth.identities` (e.g. deleting the inert accounts from §5
