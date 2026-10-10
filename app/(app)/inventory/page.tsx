@@ -174,11 +174,6 @@ export default function InventoryPage() {
       ),
     },
     {
-      key: 'min_qty',
-      header: 'Min',
-      render: (r) => <span className="tabular-nums text-zinc-500 dark:text-zinc-400">{r.min_qty}</span>,
-    },
-    {
       key: 'price',
       header: 'Unit Price',
       render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span>,
