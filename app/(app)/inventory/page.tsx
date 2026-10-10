@@ -33,6 +33,18 @@ type ItemRow = Tables<'items'> & {
   supplier: Tables<'suppliers'> | null
 }
 
+function stockTone(r: Pick<ItemRow, 'qty' | 'min_qty'>): 'good' | 'warn' | 'bad' {
+  if (r.qty === 0) return 'bad'
+  if (r.qty <= r.min_qty) return 'warn'
+  return 'good'
+}
+
+function stockLabel(r: Pick<ItemRow, 'qty' | 'min_qty'>): string {
+  if (r.qty === 0) return 'Out'
+  if (r.qty <= r.min_qty) return 'Low'
+  return 'In stock'
+}
+
 export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
@@ -59,10 +71,18 @@ export default function InventoryPage() {
   const categoriesData = categories.data ?? []
   const suppliersData = suppliers.data ?? []
 
-  const lowStock = useMemo(
-    () => (items.data ?? []).filter((i) => i.qty <= i.min_qty),
-    [items.data],
-  )
+  const stats = useMemo(() => {
+    const rows = items.data ?? []
+    let units = 0
+    let value = 0
+    let lowStock = 0
+    for (const i of rows) {
+      units += i.qty
+      value += i.qty * Number(i.price)
+      if (i.qty <= i.min_qty) lowStock++
+    }
+    return { totalItems: rows.length, units, value, lowStock }
+  }, [items.data])
 
   const run = useCallback(
     async (fn: () => Promise<unknown>, success: string) => {
@@ -124,10 +144,50 @@ export default function InventoryPage() {
       header: 'Barcode',
       render: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
     },
-    { key: 'name', header: 'Item Name', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.name}</span> },
+    {
+      key: 'name',
+      header: 'Item Name',
+      render: (r) => (
+        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+          {r.name}
+          {(r.brand || r.model) && (
+            <span className="ml-1.5 font-normal text-zinc-400">
+              · {r.brand}
+              {r.model && `${r.brand ? ' ' : ''}${r.model}`}
+            </span>
+          )}
+        </span>
+      ),
+    },
     { key: 'category', header: 'Category', render: (r) => r.category?.name ?? <span className="text-zinc-400">—</span> },
-    { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
-    { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
+    {
+      key: 'stock',
+      header: 'Stock',
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <span className={`tabular-nums font-semibold ${stockTone(r) === 'good' ? 'text-zinc-900 dark:text-zinc-100' : 'text-amber-700 dark:text-amber-400'}`}>
+            {r.qty}
+          </span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">{r.unit}</span>
+          <Badge tone={stockTone(r)}>{stockLabel(r)}</Badge>
+        </div>
+      ),
+    },
+    {
+      key: 'min_qty',
+      header: 'Min',
+      render: (r) => <span className="tabular-nums text-zinc-500 dark:text-zinc-400">{r.min_qty}</span>,
+    },
+    {
+      key: 'price',
+      header: 'Unit Price',
+      render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span>,
+    },
+    {
+      key: 'value',
+      header: 'Value',
+      render: (r) => <span className="tabular-nums text-zinc-900 dark:text-zinc-100">{(r.qty * Number(r.price)).toFixed(2)}</span>,
+    },
     {
       key: 'serial',
       header: 'Serial No.',
@@ -135,23 +195,16 @@ export default function InventoryPage() {
         r.serial_number ? <span className="font-mono text-xs">{r.serial_number}</span> : <span className="text-zinc-400">—</span>,
     },
     {
-      key: 'qty',
-      header: 'Quantity',
-      render: (r) => (
-        <span className={r.qty <= r.min_qty ? 'font-semibold text-amber-700 dark:text-amber-400' : ''}>
-          {r.qty} {r.unit}
-        </span>
-      ),
-    },
-    { key: 'price', header: 'Unit Price', render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span> },
-    {
       key: 'purchase_date',
       header: 'Date of Purchase',
       render: (r) => (r.purchase_date ? formatDate(r.purchase_date) : <span className="text-zinc-400">—</span>),
     },
     { key: 'supplier', header: 'Supplier', render: (r) => r.supplier?.company ?? <span className="text-zinc-400">—</span> },
-    { key: 'dept', header: 'Department / Location', render: (r) => r.department_location ?? <span className="text-zinc-400">—</span> },
-    { key: 'remark', header: 'User Remark', render: (r) => r.remark ?? <span className="text-zinc-400">—</span> },
+    {
+      key: 'dept',
+      header: 'Department / Location',
+      render: (r) => r.department_location ?? <span className="text-zinc-400">—</span>,
+    },
   ]
 
   columns.push({
@@ -173,18 +226,25 @@ export default function InventoryPage() {
     ),
   })
 
+  const tiles = [
+    { label: 'Items tracked', value: stats.totalItems.toLocaleString() },
+    { label: 'Units on hand', value: stats.units.toLocaleString() },
+    { label: 'Stock value', value: stats.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
+    { label: 'At or below min', value: stats.lowStock.toLocaleString(), tone: stats.lowStock > 0 ? 'warn' : 'good' },
+  ] as const
+
   return (
     <>
       <PageHeader
         title="Inventory"
-        description={items.data ? `${items.data.length} items` : undefined}
+        description={items.data ? `${items.data.length} items across the catalog` : undefined}
         actions={
           <>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, barcode, brand…"
-              className="w-56"
+              className="w-64"
               aria-label="Search items"
             />
             <Select
@@ -209,22 +269,40 @@ export default function InventoryPage() {
 
       {notice && <Notice className="mb-3">{notice}</Notice>}
       {actionError && <Notice tone="bad" className="mb-3">{actionError}</Notice>}
-      {lowStock.length > 0 && (
-        <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">
-          <Badge tone="warn">{lowStock.length}</Badge> <span className="ml-1">at or below minimum quantity</span>
-        </p>
-      )}
 
-      <Card>
-        <AsyncBoundary loading={items.loading} error={items.error} errorCode={items.errorCode} onRetry={items.reload}>
+      <AsyncBoundary loading={items.loading} error={items.error} errorCode={items.errorCode} onRetry={items.reload}>
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {tiles.map((t) => (
+            <Card key={t.label} className="px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t.label}</p>
+              <p
+                className={`mt-1 text-2xl font-semibold tabular-nums ${
+                  'tone' in t && t.tone === 'warn'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-zinc-900 dark:text-zinc-50'
+                }`}
+              >
+                {t.value}
+              </p>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
           <DataTable
             columns={columns}
             rows={items.data ?? []}
             rowKey={(r) => r.id}
-            empty={<EmptyState title="No items yet" hint="Create your first inventory item, or run supabase/seed.sql for sample data." />}
+            rowClassName={(r) => (r.qty <= r.min_qty ? 'bg-amber-50/50 dark:bg-amber-950/20' : '')}
+            empty={
+              <EmptyState
+                title="No items yet"
+                hint="Create your first inventory item, or run supabase/seed.sql for sample data."
+              />
+            }
           />
-        </AsyncBoundary>
-      </Card>
+        </Card>
+      </AsyncBoundary>
 
       <Modal
         open={creating || editing !== null}

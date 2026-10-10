@@ -22,11 +22,13 @@ export function DataTable<T>({
   rows,
   rowKey,
   empty,
+  rowClassName,
 }: {
   columns: Column<T>[]
   rows: T[]
   rowKey: (row: T) => string
   empty?: ReactNode
+  rowClassName?: (row: T) => string
 }) {
   const { preferences } = usePreferences()
   const pageSize = preferences.pageSize
@@ -68,7 +70,9 @@ export function DataTable<T>({
             {visible.map((row) => (
               <tr
                 key={rowKey(row)}
-                className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40"
+                className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40 ${
+                  rowClassName?.(row) ?? ''
+                }`}
               >
                 {columns.map((c) => (
                   <td
