@@ -150,16 +150,24 @@ export default function InventoryPage() {
       render: (r) => (
         <span className="font-medium text-zinc-900 dark:text-zinc-100">
           {r.name}
-          {(r.brand || r.model) && (
-            <span className="ml-1.5 font-normal text-zinc-400">
-              · {r.brand}
-              {r.model && `${r.brand ? ' ' : ''}${r.model}`}
-            </span>
-          )}
+          {r.brand && <span className="ml-1.5 font-normal text-zinc-400">· {r.brand}</span>}
         </span>
       ),
     },
     { key: 'category', header: 'Category', render: (r) => r.category?.name ?? <span className="text-zinc-400">—</span> },
+    { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
+    {
+      key: 'description',
+      header: 'Description',
+      render: (r) =>
+        r.description ? (
+          <span title={r.description} className="block max-w-56 truncate text-zinc-600 dark:text-zinc-300">
+            {r.description}
+          </span>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        ),
+    },
     {
       key: 'stock',
       header: 'Stock',
