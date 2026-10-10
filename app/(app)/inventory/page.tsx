@@ -147,14 +147,10 @@ export default function InventoryPage() {
     {
       key: 'name',
       header: 'Item Name',
-      render: (r) => (
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
-          {r.name}
-          {r.brand && <span className="ml-1.5 font-normal text-zinc-400">· {r.brand}</span>}
-        </span>
-      ),
+      render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.name}</span>,
     },
     { key: 'category', header: 'Category', render: (r) => r.category?.name ?? <span className="text-zinc-400">—</span> },
+    { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
     { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
     {
       key: 'description',
@@ -170,7 +166,7 @@ export default function InventoryPage() {
     },
     {
       key: 'stock',
-      header: 'Stock',
+      header: 'Quantity',
       render: (r) => (
         <div className="flex items-center gap-2">
           <span className={`tabular-nums font-semibold ${stockTone(r) === 'good' ? 'text-zinc-900 dark:text-zinc-100' : 'text-amber-700 dark:text-amber-400'}`}>
