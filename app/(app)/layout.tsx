@@ -2,10 +2,15 @@ import type { ReactNode } from 'react'
 import { Nav } from '@/components/Nav'
 import { ConnectionStatus } from '@/components/ConnectionStatus'
 import { LandingRedirect } from '@/components/LandingRedirect'
+import { GATE_INIT_SCRIPT } from '@/lib/session'
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col lg:flex-row">
+      {/* Client-side sign-in gate (see lib/session.ts): pre-paint redirect to
+          /login when the signed-in flag is missing. Renders into the HTML so it
+          runs before the shell paints. */}
+      <script dangerouslySetInnerHTML={{ __html: GATE_INIT_SCRIPT }} />
       <LandingRedirect />
       <aside className="border-b border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40 lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
         <div className="flex h-full flex-col px-4 py-4">

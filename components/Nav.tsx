@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { clearSession } from '@/lib/session'
 
 const ICONS: Record<string, ReactNode> = {
   dashboard: (
@@ -106,38 +107,69 @@ const LINKS: { href: string; label: string; icon: keyof typeof ICONS }[] = [
 
 export function Nav() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  function handleSignOut() {
+    clearSession()
+    router.push('/login')
+  }
 
   return (
-    <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-      {LINKS.map((link) => {
-        const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            aria-current={active ? 'page' : undefined}
-            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              active
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
-            }`}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="size-4 shrink-0"
-              aria-hidden="true"
+    <div className="flex flex-1 flex-col gap-1">
+      <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+        {LINKS.map((link) => {
+          const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              aria-current={active ? 'page' : undefined}
+              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+              }`}
             >
-              {ICONS[link.icon]}
-            </svg>
-            {link.label}
-          </Link>
-        )
-      })}
-    </nav>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-4 shrink-0"
+                aria-hidden="true"
+              >
+                {ICONS[link.icon]}
+              </svg>
+              {link.label}
+            </Link>
+          )
+        })}
+      </nav>
+
+      <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+        <button
+          onClick={handleSignOut}
+          className="inline-flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-4 shrink-0"
+            aria-hidden="true"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="m16 17 5-5-5-5" />
+            <path d="M21 12H9" />
+          </svg>
+          Sign out
+        </button>
+      </div>
+    </div>
   )
 }

@@ -10,12 +10,15 @@ the Vercel Git integration.
 
 > **This app is public again.** The auth layer that was built on 2026-10-09 (the second one) has
 > been removed a second time: `/sign-in`, `/sign-up`, the root `proxy.ts`, per-screen permission
-> gates and RLS-to-`authenticated` are gone. RLS is `TO anon`, every screen loads without a
-> session, and there is **no gated surface left** — the Admin Console was removed on 2026-10-10.
-> On the same day a standalone `/login` page was added (username + password, no email). It is a
-> page, not a session: it signs nobody in, gates nothing, and sets no cookie. Its credential
-> store, `app_users`, is deliberately invisible to PostgREST (RLS on, no anon policies/grants);
-> the only way in is the `login_user()` SECURITY DEFINER function (§3).
+> gates and RLS-to-`authenticated` are gone. RLS is `TO anon` and there is **no gated surface
+> left** — the Admin Console was removed on 2026-10-10. On the same day a standalone `/login`
+> page was added (username + password, no email); by explicit request it was then turned into a
+> **client-side entrance gate**: successful sign-in stores a flag in `localStorage`
+> (`inventory.signedIn`) and the `(app)` layout redirects to `/login` pre-paint when the flag is
+> missing. This is a UX gate, **not** a security boundary — the flag is in the user's own browser
+> and the data stays readable through the publishable key. `/login`'s credential store,
+> `app_users`, is deliberately invisible to PostgREST (RLS on, no anon policies/grants); the only
+> way in is the `login_user()` SECURITY DEFINER function (§3).
 > §3 describes the boundary; this file is the source of truth for it.
 
 ---
@@ -52,13 +55,16 @@ the Vercel Git integration.
 ```
 app/
   layout.tsx              root: Geist fonts, metadata, theme init script, PreferencesProvider
-  (app)/                  the 11 app screens + shared sidebar shell
-  login/                  standalone username + password sign-in form (no session, no gating)
+  (app)/                  the 11 app screens + shared sidebar shell; renders the client-side
+                          sign-in gate script (lib/session.ts) before its first paint
+  login/                  username + password sign-in form (no email). On success writes the
+                          `inventory.signedIn` localStorage flag and opens the app; failed
+                          sign-ins stay on this page
   maintenance/            Maintenance History log: create + delete
   reports/                read-only rollups: valuation, purchases, requests, maintenance
   settings/               company info (DB-backed, logo upload) + browser-only preferences
   api/supabase-test/      connection diagnostic (public)
-components/               flat: ui.tsx, Nav, DataTable (paginates per preference), Modal, forms,
+components/               flat: ui.tsx, Nav (links + Sign out), DataTable (paginates per preference), Modal, forms,
                           ConnectionStatus, MovementForm, ItemFormFields,
                           PreferencesProvider, LandingRedirect
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
@@ -94,7 +100,8 @@ shell that verifies a username + password against `app_users` and sets no sessio
 
 ## 3. Access control — the current boundary
 
-The app has no sign-in. `/login` exists but is a page, not a layer. Read this before touching RLS.
+The app has no real sign-in. `/login` is a client-side entrance gate (§3 bullets). Read this
+before touching RLS.
 
 - **Data is public by design.** RLS is enabled on all ten tables but every policy is
   `TO anon USING (true)` / `WITH CHECK (true)`, and `anon` holds the grants the screens
@@ -111,10 +118,17 @@ The app has no sign-in. `/login` exists but is a page, not a layer. Read this be
   `supabase.rpc('login_user', …)` in `services/inventoryService.ts:loginUser`. This is **not**
   a session layer and does not gate anything; if `/login` ever must gate screens, the boundary
   to revisit is here plus the browser client key, not just a redirect.
-- **There is no gated surface.** The Admin Console and its
-  `/api/admin/users*` handlers were removed on 2026-10-10: no `adminSecretGate`, no
-  `ADMIN_CONSOLE_SECRET`, no `app_metadata` reads. Do not re-add `permissionCheck`,
-  a `ScreenGate`, or a session layer unless one is explicitly asked for.
+- **There is a client-side entrance gate, and only that.** As of 2026-10-10 the `(app)` layout
+  runs `lib/session.ts`'s `GATE_INIT_SCRIPT` before first paint and redirects to `/login` when
+  `localStorage['inventory.signedIn']` is missing; `/login` writes that flag after a successful
+  `login_user()` call and opens the app; Nav has Sign out (clears the flag). This is a UX entry gate, not a
+  security boundary: the flag lives in the user's own browser (clearable,
+  forgeable), every (app) route still servers as prerendered HTML, the data is still readable
+  through the publishable key, and RLS is untouched. Do not mistake it for auth; the Admin
+  Console and its `/api/admin/users*` handlers were removed on 2026-10-10 — no
+  `adminSecretGate`, no `ADMIN_CONSOLE_SECRET`, no `app_metadata` reads. A real session layer
+  (server-issued cookie checked on every screen, data nailed down past anon) must be a separate,
+  explicitly-requested change.
 - **RLS in `supabase/schema.sql`** is generated in one `DO` block — one policy per table per
   command (`read on <table>`, `write on <table> (insert|update|delete)`), revoked from both roles
   first, granted to `anon` only, `authenticated` revoked everywhere. `check:rls` guards the
@@ -219,7 +233,8 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
   when the modal opens, submit buttons read `Saving…` / `Deleting…` while busy, and raw `<select>`
   filters use the `Select` primitive.
 - Client screens follow the `useAsyncData` + `AsyncBoundary` + `DataTable` pattern with
-  `Column<T>[]`. There is no `ScreenGate`: a screen renders its content directly.
+  `Column<T>[]`. Gating is not per-screen: the `(app)` layout's pre-paint script redirects to
+  `/login` when the session flag is missing, and screens render their content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.
 - `components/Nav.tsx` links the 11 screens; it no longer filters by permission. A new screen →
   add its entry to `LINKS` and a route under `app/(app)/`.
@@ -296,11 +311,13 @@ authenticated CLI is needed there (§8).
 - `git push origin main` is the whole deploy. The Vercel Git integration is connected and builds
   automatically. Nothing in the repo configures it; `vercel.json` only sets `framework`, `regions`
   and security headers.
-- **There is no sign-in — there is a login page.** `/login` exists (2026-10-10) and verifies an
-  admin username + password against `app_users`, but it signs nobody in and gates nothing; the RLS
-  policies `TO anon` make the data readable and writable through the publishable key regardless.
+- **There is a login page that gates the UI, and no real auth.** `/login` (2026-10-10) verifies a
+  username + password against `app_users`, then stores a `localStorage` flag; app screens redirect
+  to `/login` when the flag is missing. That is a client-side UX gate only — the RLS policies
+  `TO anon` make the data readable and writable through the publishable key regardless, and
+  anyone can bypass the flag. It does **not** gate direct PostgREST access.
   Deployment Protection (Vercel SSO) still 302s anonymous traffic, which is useful mid-migration
-  but is **not** a data boundary (§3). Ordinary staff reach the app simply by opening the URL.
+  but is **not** a data boundary (§3).
 - **Tooling on this machine:** `gh` is installed but **not** authenticated. The `vercel` CLI **is**
   authenticated (device login as `thimsin79-8849`, 2026-10-08) and the project **is** linked —
   `.vercel/project.json` exists and `.gitignore` covers it. `vercel env ls/add/rm`, `vercel

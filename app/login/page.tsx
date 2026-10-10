@@ -1,11 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button, Card, Input, Label, Notice } from '@/components/ui'
 import { loginUser } from '@/services/inventoryService'
 import { errorMessage } from '@/utils/errors'
+import { writeSession } from '@/lib/session'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -18,10 +21,11 @@ export default function LoginPage() {
     try {
       const result = await loginUser(username.trim(), password)
       if (result.ok) {
-        setNotice({ tone: 'good', text: `Signed in as ${result.display_name ?? username.trim()}.` })
-      } else {
-        setNotice({ tone: 'bad', text: 'Invalid username or password.' })
+        writeSession(result.display_name?.trim() || username.trim())
+        router.push('/')
+        return
       }
+      setNotice({ tone: 'bad', text: 'Invalid username or password.' })
     } catch (error) {
       setNotice({ tone: 'bad', text: errorMessage(error) })
     } finally {
