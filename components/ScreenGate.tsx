@@ -1,8 +1,10 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/components/AuthProvider'
-import { EmptyState, Spinner } from '@/components/ui'
+import { Button, EmptyState, Spinner } from '@/components/ui'
+import { createClient } from '@/lib/supabase/client'
 import type { PermissionKey } from '@/lib/permissions'
 
 /**
@@ -12,15 +14,37 @@ import type { PermissionKey } from '@/lib/permissions'
  */
 export function ScreenGate({ permission, children }: { permission: PermissionKey; children: ReactNode }) {
   const { loading, can } = useAuth()
+  const [refreshing, setRefreshing] = useState(false)
 
   if (loading) return <Spinner label="Checking access" />
 
   if (!can(permission)) {
     return (
-      <EmptyState
-        title="No access to this screen"
-        hint={`This screen needs the ${permission} permission. An administrator can grant it in Admin Console, under Users, in Permissions.`}
-      />
+      <div className="space-y-4">
+        <EmptyState
+          title="No access to this screen"
+          hint={`This screen needs the ${permission} permission. An administrator can grant it in Admin Console, under Users, in Permissions.`}
+        />
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            disabled={refreshing}
+            onClick={async () => {
+              setRefreshing(true)
+              try {
+                await createClient().auth.refreshSession()
+                window.location.reload()
+              } catch {
+                // fall through
+              } finally {
+                setRefreshing(false)
+              }
+            }}
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh access'}
+          </Button>
+        </div>
+      </div>
     )
   }
 

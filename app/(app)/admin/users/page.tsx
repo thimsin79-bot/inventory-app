@@ -261,74 +261,72 @@ export default function AdminUsersPage() {
         across the app. Changes apply after the account&apos;s session token next refreshes.
       </p>
 
-      <ScreenGate permission="admin.view">
-        {locked ? (
-          <Card>
-            <div className="space-y-4 p-4 sm:p-6">
-              <div>
-                <Label htmlFor="admin-console-secret">Admin console secret</Label>
-                <Input
-                  id="admin-console-secret"
-                  type="password"
-                  value={secretInput}
-                  onChange={(e) => setSecretInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitUnlock()
-                  }}
-                  placeholder="Shared secret for this console"
-                  autoFocus
-                />
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  This console is locked until the secret matches ADMIN_CONSOLE_SECRET on the
-                  server. It is kept for this tab only.
-                </p>
-              </div>
-              {!verifying && activeUnlockError && (
-                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-                  {activeUnlockError}
-                </p>
-              )}
-              <Button variant="primary" onClick={submitUnlock} disabled={verifying}>
-                {verifying ? 'Checking…' : 'Unlock'}
-              </Button>
+      {locked ? (
+        <Card>
+          <div className="space-y-4 p-4 sm:p-6">
+            <div>
+              <Label htmlFor="admin-console-secret">Admin console secret</Label>
+              <Input
+                id="admin-console-secret"
+                type="password"
+                value={secretInput}
+                onChange={(e) => setSecretInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitUnlock()
+                }}
+                placeholder="Shared secret for this console"
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                This console is locked until the secret matches ADMIN_CONSOLE_SECRET on the
+                server. It is kept for this tab only.
+              </p>
             </div>
-          </Card>
-        ) : (
-          <>
-            {notice && (
-              <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                {notice}
+            {!verifying && activeUnlockError && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
+                {activeUnlockError}
               </p>
             )}
-            {actionError && (
-              <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
-                {actionError}
-              </p>
-            )}
+            <Button variant="primary" onClick={submitUnlock} disabled={verifying}>
+              {verifying ? 'Checking…' : 'Unlock'}
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <ScreenGate permission="admin.view">
+          {notice && (
+            <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+              {notice}
+            </p>
+          )}
+          {actionError && (
+            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-300">
+              {actionError}
+            </p>
+          )}
 
-            <Card>
-              <AsyncBoundary
-                loading={users.loading}
-                error={users.error}
-                errorCode={users.errorCode}
-                onRetry={users.reload}
-              >
-                <DataTable
-                  columns={columns}
-                  rows={users.data ?? []}
-                  rowKey={(r) => r.id}
-                  empty={
-                    <EmptyState
-                      title="No accounts yet"
-                      hint="Create the first account with New user."
-                    />
-                  }
-                />
-              </AsyncBoundary>
-            </Card>
-          </>
-        )}
-      </ScreenGate>
+          <Card>
+            <AsyncBoundary
+              loading={users.loading}
+              error={users.error}
+              errorCode={users.errorCode}
+              onRetry={users.reload}
+            >
+              <DataTable
+                columns={columns}
+                rows={users.data ?? []}
+                rowKey={(r) => r.id}
+                empty={
+                  <EmptyState
+                    title="No accounts yet"
+                    hint="Create the first account with New user."
+                  />
+                }
+              />
+            </AsyncBoundary>
+          </Card>
+        </ScreenGate>
+      )}
 
       <Modal
         open={creating}
