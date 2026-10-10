@@ -8,7 +8,7 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { usePreferences } from '@/components/PreferencesProvider'
 import { LANDING_OPTIONS, PAGE_SIZE_OPTIONS, type ThemePreference } from '@/lib/preferences'
-import { Button, Card, Field, Input, Label, Notice, PageHeader, Select, Textarea } from '@/components/ui'
+import { Button, Card, Field, Input, Notice, PageHeader, Select, Textarea } from '@/components/ui'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -145,71 +145,81 @@ export default function SettingsPage() {
         description="Company details are stored app-wide; the preferences below are stored in this browser only."
       />
 
-      <div className="max-w-xl space-y-4">
-        <AsyncBoundary loading={company.loading} error={company.error} errorCode={company.errorCode} onRetry={company.reload}>
-          <CompanyEditor initial={company.data} onSaved={company.reload} />
-        </AsyncBoundary>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <AsyncBoundary loading={company.loading} error={company.error} errorCode={company.errorCode} onRetry={company.reload}>
+            <CompanyEditor initial={company.data} onSaved={company.reload} />
+          </AsyncBoundary>
+        </div>
 
-        <Card className="p-4">
-          <p className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-100">Personal preferences</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="st-theme">Theme</Label>
-              <Select
-                id="st-theme"
-                value={preferences.theme}
-                onChange={(e) => update({ theme: e.target.value as ThemePreference })}
-              >
-                <option value="system">Follow device</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="st-page-size">Rows per page</Label>
-              <Select
-                id="st-page-size"
-                value={preferences.pageSize}
-                onChange={(e) => update({ pageSize: Number(e.target.value) })}
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="st-landing">Landing page</Label>
-              <Select
-                id="st-landing"
-                value={preferences.defaultPage}
-                onChange={(e) => update({ defaultPage: e.target.value })}
-              >
-                {LANDING_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                The first visit to the app in a session starts here. The Dashboard stays one click away in the sidebar.
+        <div className="space-y-4">
+          <Card>
+            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Personal preferences</p>
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                Stored in this browser only — other devices keep their own.
               </p>
             </div>
-          </div>
-        </Card>
+            <div className="grid gap-3 p-4 sm:grid-cols-2">
+              <Field label="Theme" htmlFor="st-theme">
+                <Select
+                  id="st-theme"
+                  value={preferences.theme}
+                  onChange={(e) => update({ theme: e.target.value as ThemePreference })}
+                >
+                  <option value="system">Follow device</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </Select>
+              </Field>
+              <Field label="Rows per page" htmlFor="st-page-size">
+                <Select
+                  id="st-page-size"
+                  value={preferences.pageSize}
+                  onChange={(e) => update({ pageSize: Number(e.target.value) })}
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                label="Landing page"
+                htmlFor="st-landing"
+                className="sm:col-span-2"
+                hint="The first visit to the app in a session starts here. The Dashboard stays one click away in the sidebar."
+              >
+                <Select
+                  id="st-landing"
+                  value={preferences.defaultPage}
+                  onChange={(e) => update({ defaultPage: e.target.value })}
+                >
+                  {LANDING_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          </Card>
 
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
-            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Reset preferences</p>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              Back to the default theme, Dashboard landing page and 25 rows per page. Company information is not touched.
-            </p>
-          </div>
-          <Button variant="secondary" onClick={reset}>
-            Reset to defaults
-          </Button>
-        </Card>
+          <Card>
+            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Reset preferences</p>
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                Back to the default theme, Dashboard landing page and 25 rows per page. Company information is not touched.
+              </p>
+            </div>
+            <div className="flex justify-end px-4 py-3">
+              <Button variant="secondary" onClick={reset}>
+                Reset to defaults
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
     </>
   )
