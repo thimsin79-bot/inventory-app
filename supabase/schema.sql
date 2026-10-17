@@ -115,19 +115,7 @@ CREATE TABLE IF NOT EXISTS public.requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 9. Stock Audits
-CREATE TABLE IF NOT EXISTS public.audits (
-    id TEXT PRIMARY KEY,
-    warehouse TEXT NOT NULL,
-    item_name TEXT NOT NULL,
-    system_qty INTEGER NOT NULL,
-    physical_qty INTEGER NOT NULL,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    status TEXT NOT NULL DEFAULT 'Pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
-);
-
--- 10. Maintenance History
+-- 9. Maintenance History
 -- A simple log of servicing and repairs: who/what was maintained, when, and at
 -- what cost. It is not tied to `items` by a foreign key -- the log keeps its own
 -- item text so a record survives an item being renamed or deleted.
@@ -337,7 +325,6 @@ ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.company_settings ENABLE ROW LEVEL SECURITY;
 -- `app_users` also has RLS enabled; it is deliberately NOT in the policy loop
@@ -357,7 +344,7 @@ ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 -- `all_tables` below on purpose: its only access is the `login_user()` function.
 --
 -- One policy per table per command -- four per table, generated rather than
--- written out longhand because ten data tables times four commands is forty
+-- written out longhand because nine data tables times four commands is thirty-six
 -- statements to keep in step. Policy names are unique per table, so the three
 -- write policies cannot share one name; each carries its command:
 --
@@ -373,7 +360,7 @@ DO $policies$
 DECLARE
   all_tables text[] := ARRAY[
     'categories', 'suppliers', 'warehouses', 'departments',
-    'items', 'purchases', 'requests', 'audits', 'maintenance',
+    'items', 'purchases', 'requests', 'maintenance',
     'company_settings'
   ];
 
@@ -437,7 +424,7 @@ DROP SCHEMA IF EXISTS private CASCADE;
 -- access to anything added later by accident.
 --
 -- Grants are additive, and the live database predates this file: earlier runs
--- left `anon` with every table privilege, including DELETE on the four tables
+-- left `anon` with every table privilege, including DELETE on the three tables
 -- below and TRUNCATE / REFERENCES / TRIGGER anywhere -- none of which any screen
 -- uses. A grant is invisible next to a policy, so revoking first is what makes
 -- the GRANTs that follow the whole truth on any starting state. Both `anon` and
@@ -450,7 +437,6 @@ REVOKE ALL ON public.departments FROM anon;
 REVOKE ALL ON public.items FROM anon;
 REVOKE ALL ON public.purchases FROM anon;
 REVOKE ALL ON public.requests FROM anon;
-REVOKE ALL ON public.audits FROM anon;
 REVOKE ALL ON public.maintenance FROM anon;
 REVOKE ALL ON public.company_settings FROM anon;
 -- `app_users` gets no grants at all -- being revoked here on top of RLS-with-
@@ -465,7 +451,6 @@ REVOKE ALL ON public.departments FROM authenticated;
 REVOKE ALL ON public.items FROM authenticated;
 REVOKE ALL ON public.purchases FROM authenticated;
 REVOKE ALL ON public.requests FROM authenticated;
-REVOKE ALL ON public.audits FROM authenticated;
 REVOKE ALL ON public.maintenance FROM authenticated;
 REVOKE ALL ON public.company_settings FROM authenticated;
 REVOKE ALL ON public.app_users FROM authenticated;
@@ -481,13 +466,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.maintenance TO anon;
 
 -- The one limit beyond the anon/authenticated split: no screen deletes a
--- purchase, request or audit, and `services/inventoryService.ts`
+-- purchase or request, and `services/inventoryService.ts`
 -- exports no delete for them either -- so DELETE is withheld at the grant. If a
 -- delete feature is ever added for one of these, add the grant in the same
 -- change. `items` keeps DELETE because the inventory screen does delete items.
 GRANT SELECT, INSERT, UPDATE ON public.purchases TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.requests TO anon;
-GRANT SELECT, INSERT, UPDATE ON public.audits TO anon;
 -- company_settings is written only by the Settings screen upserting on id 1;
--- nothing deletes the row, so DELETE is withheld like the three tables above.
+-- nothing deletes the row, so DELETE is withheld like the two tables above.
 GRANT SELECT, INSERT, UPDATE ON public.company_settings TO anon;

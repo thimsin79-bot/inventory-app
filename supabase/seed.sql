@@ -95,15 +95,6 @@ INSERT INTO public.requests (id, dept, item_name, qty, date, requested_by, statu
 ('REQ-0347', 'Library', 'English Dictionary', 3, '2026-10-02', 'Ms. Sreyneang', 'Returned')
 ON CONFLICT (id) DO NOTHING;
 
--- Audits
-INSERT INTO public.audits (id, warehouse, item_name, system_qty, physical_qty, date, status) VALUES
-('AUD-0018', 'Library Store', 'English Dictionary', 8, 6, '2026-09-23', 'Adjusted'),
-('AUD-0017', 'Main Store', 'A4 Copy Paper', 20, 20, '2026-09-18', 'Matched'),
-('AUD-0016', 'Science Lab Store', 'Ethanol 95% (1L)', 4, 2, '2026-09-15', 'Adjusted'),
-('AUD-0015', 'Main Store', 'Office Chair', 26, 26, '2026-09-10', 'Matched'),
-('AUD-0014', 'IT Equipment Room', 'Dell Latitude Laptop', 7, 8, '2026-09-08', 'Pending')
-ON CONFLICT (id) DO NOTHING;
-
 -- Maintenance History
 INSERT INTO public.maintenance (id, item_name, date, description, cost, status) VALUES
 ('MNT-00001', 'Epson Projector EB-X51', '2026-09-20', 'Lamp replaced and lens cleaned', 85.00, 'Completed'),

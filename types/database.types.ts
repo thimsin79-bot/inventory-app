@@ -291,39 +291,6 @@ export interface Database {
         }
         Relationships: []
       }
-      audits: {
-        Row: {
-          id: string
-          warehouse: string
-          item_name: string
-          system_qty: number
-          physical_qty: number
-          date: string
-          status: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          warehouse: string
-          item_name: string
-          system_qty?: number
-          physical_qty?: number
-          date?: string
-          status?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          warehouse?: string
-          item_name?: string
-          system_qty?: number
-          physical_qty?: number
-          date?: string
-          status?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
       maintenance: {
         Row: {
           id: string

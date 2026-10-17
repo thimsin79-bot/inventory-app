@@ -13,14 +13,14 @@
  *
  * So it checks that:
  *
- *   - all ten data tables are declared and all ten have RLS enabled
+ *   - all nine data tables are declared and all nine have RLS enabled
  *   - SELECT / INSERT / UPDATE / DELETE policies are generated for every table
  *   - the policies target `anon` and never `authenticated`
  *   - `anon` is granted the same commands the policies cover
  *   - `authenticated` is granted nothing and revoked from every table
  *   - `anon` is revoked first so the grants are the whole truth
- *   - DELETE stays withheld on the three tables no screen can delete from
- *     plus company_settings (four total)
+ *   - DELETE stays withheld on purchases, requests and company_settings
+ *     (three total)
  *   - nothing from the removed role ladder survives (current_role, app_metadata)
  *   - no table is left readable through a `FOR ALL USING (true)` catch-all
  *
@@ -99,13 +99,12 @@ const TABLES = [
   'items',
   'purchases',
   'requests',
-  'audits',
   'maintenance',
   'company_settings',
 ]
 
 /** Tables no screen deletes from, so DELETE is withheld at the grant. */
-const NO_DELETE = ['purchases', 'requests', 'audits', 'company_settings']
+const NO_DELETE = ['purchases', 'requests', 'company_settings']
 
 /** The /login credential store. Deliberately outside the anon boundary. */
 const APP_USERS = 'app_users'
@@ -129,7 +128,7 @@ for (const table of TABLES) {
   check(`${table} has RLS enabled`, sql.includes(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`))
 }
 check(
-  'the ten data tables and the app_users store are the only tables declared',
+  'the nine data tables and the app_users store are the only tables declared',
   [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)].length === TABLES.length + 1,
 )
 

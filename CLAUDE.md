@@ -253,6 +253,13 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     `schema.sql` could **not** be re-applied, so the live functions still compare usernames
     exactly and the case-insensitivity lives in the client until a fresh PAT is written and §9 is
     re-run.
+14. **Closed 2026-10-17 — the Audits screen and its module were removed.** Per the request to
+    remove the `/audits` page, the entire audits feature was removed: the route `app/(app)/audits`,
+    nav link and icon, landing option, `getAudits`/`createAudit` service functions, `Audit`/
+    `AuditStatus` types, audits table from `schema.sql` (policies, grants, revokes), seed rows,
+    and related check/smoke references. The live database table remains (no token to drop it);
+    the schema file now omits audits, so re-applying it won't create it. `getWarehouses()` and
+    the `warehouses` table stay (still referenced).
 
 ---
 

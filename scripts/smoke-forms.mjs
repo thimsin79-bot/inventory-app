@@ -12,7 +12,6 @@ const CLEAR_TABLES = [
   'items',
   'purchases',
   'requests',
-  'audits',
   'maintenance',
 ]
 const ALL_TABLES = [...CLEAR_TABLES, 'company_settings']
@@ -219,21 +218,6 @@ const MODULES = [
     deleteCheck: 'withheld',
   },
   {
-    name: 'audits (Audits screen)',
-    table: 'audits',
-    idKey: 'id',
-    create: {
-      id: 'AUD-SMKT1',
-      warehouse: 'Smoke Warehouse',
-      item_name: 'Smoke Item',
-      system_qty: 10,
-      physical_qty: 8,
-    },
-    defaults: { status: 'Pending' },
-    update: { physical_qty: 10 },
-    deleteCheck: 'withheld',
-  },
-  {
     name: 'maintenance (Maintenance screen)',
     table: 'maintenance',
     idKey: 'id',
@@ -331,7 +315,7 @@ async function checkCompanySettings() {
 
 async function main() {
   console.log('live smoke test: every screen table and form field, through the publishable key')
-  console.log('DESTRUCTIVE: clears all rows in nine tables; company_settings keeps its row')
+  console.log('DESTRUCTIVE: clears all rows in eight tables; company_settings keeps its row')
   console.log('\nrow counts before clearing')
   const before = await counts()
   console.table(before)

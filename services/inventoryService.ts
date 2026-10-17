@@ -9,7 +9,7 @@ function getClient(client?: Client): Client {
 }
 
 /**
- * `requests`, `audits` and `purchases` all use a TEXT primary
+ * `requests` and `purchases` both use a TEXT primary
  * key with no column default (only `items.id` has one), so an id has to be
  * supplied on insert. Generating it here keeps the format in one place instead
  * of every caller inventing its own.
@@ -391,35 +391,6 @@ export async function updatePurchase(id: string, updates: Updates<'purchases'>, 
     .from('purchases')
     .update(updates)
     .eq('id', id)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-/**
- * Fetch stock audits
- */
-export async function getAudits(client?: Client) {
-  const supabase = getClient(client)
-  const { data, error } = await supabase
-    .from('audits')
-    .select('*')
-    .order('date', { ascending: false })
-
-  if (error) throw error
-  return data
-}
-
-/**
- * Create a stock audit
- */
-export async function createAudit(audit: Inserts<'audits'>, client?: Client) {
-  const supabase = getClient(client)
-  const { data, error } = await supabase
-    .from('audits')
-    .insert({ id: nextId('AUD', 5), ...audit })
     .select()
     .single()
 

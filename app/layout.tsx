@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Inventory Management',
-  description: 'Track stock levels, purchases, requisitions and audits across warehouses.',
+  description: 'Track stock levels, purchases and requisitions across warehouses.',
 }
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
