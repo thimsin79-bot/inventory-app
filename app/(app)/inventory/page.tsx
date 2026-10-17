@@ -210,6 +210,18 @@ export default function InventoryPage() {
       header: 'Location',
       render: (r) => r.location ?? <span className="text-zinc-400">—</span>,
     },
+    {
+      key: 'remark',
+      header: 'User Remark',
+      render: (r) =>
+        r.remark ? (
+          <span title={r.remark} className="block max-w-56 truncate text-zinc-600 dark:text-zinc-300">
+            {r.remark}
+          </span>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        ),
+    },
   ]
 
   columns.push({
