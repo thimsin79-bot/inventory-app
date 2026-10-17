@@ -206,7 +206,7 @@ DECLARE
 BEGIN
     SELECT app.password_hash, app.display_name INTO stored, name
     FROM public.app_users app
-    WHERE app.username = p_username;
+    WHERE lower(app.username) = lower(btrim(p_username));
 
     IF stored IS NULL THEN
         RETURN QUERY SELECT FALSE, NULL::TEXT;
@@ -258,9 +258,13 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    IF EXISTS (SELECT 1 FROM public.app_users WHERE lower(username) = lower(btrim(p_username))) THEN
+        RETURN FALSE;
+    END IF;
+
     INSERT INTO public.app_users (username, password_hash, display_name)
     VALUES (
-        btrim(p_username),
+        lower(btrim(p_username)),
         crypt(p_password, gen_salt('bf')),
         CASE WHEN p_display_name IS NULL OR btrim(p_display_name) = '' THEN NULL ELSE btrim(p_display_name) END
     )

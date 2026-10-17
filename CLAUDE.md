@@ -2,7 +2,7 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 10, 2026
+**Last Updated:** October 17, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
@@ -197,7 +197,9 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
    token, the database password, and an `sb_secret_…` key. The scoped Database Read-write PAT
    (`.env.local`, `SUPABASE_ACCESS_TOKEN`) is now **scripts-only** — `npm run smoke` and hand-run
    §9 SQL — so rotating it needs no downtime window. Prefer handing a token over by writing it
-   to a gitignored file rather than pasting it into a conversation.
+   to a gitignored file rather than pasting it into a conversation. **As of 2026-10-17 the token
+   in `.env.local` is dead** (`401 Invalid access token`), so `npm run smoke` and hand-run §9 SQL
+   are blocked until a fresh PAT is written there (see item 13).
 5. **Closed 2026-10-10 — the Admin Console was removed.** `app/admin/` (users screen + shell),
    `app/api/admin/users*`, `lib/{adminGate.ts,adminAuth.ts,permissions.ts}`,
    `services/adminUsersService.ts`, `components/PermissionPicker.tsx`,
@@ -237,6 +239,20 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     "cards instead of tables on phones" ask, rows below `sm` stack as label/value cards
     (`sm:hidden`) and the real table renders on `sm+` (`hidden sm:block`) — one change in
     `components/DataTable.tsx` covers ~13 tables. Shipped as `2734692`.
+13. **Closed 2026-10-17 — the /login "Invalid username or password" lockout was fixed.** The
+    seeded `admin` row had been deleted from the live `app_users` table (only `Sin` and two
+    `edge…` accounts remained), so `admin`/`admin123` returned `{ok: false}`. `admin` was
+    re-created live through `create_login_user` (publishable key, no token needed) with display
+    name `Administrator`, and username matching is now case-insensitive end to end: in
+    `schema.sql`, `login_user` lower-compares against `lower(btrim(...))` and `create_login_user`
+    stores `lower(btrim(...))` and rejects a case-insensitive duplicate; in the client
+    (`services/inventoryService.ts`), create lowercases the username and a failed `login_user`
+    attempt resolves the stored spelling through `list_login_users` and retries once. Verified
+    live over REST: `admin`/`Admin`/`ADMIN` all `{ok: true}`, wrong password `{ok: false}`, and a
+    create/login/delete round-trip. **Caveat:** the dead `SUPABASE_ACCESS_TOKEN` (item 4) meant
+    `schema.sql` could **not** be re-applied, so the live functions still compare usernames
+    exactly and the case-insensitivity lives in the client until a fresh PAT is written and §9 is
+    re-run.
 
 ---
 

@@ -561,6 +561,10 @@ export async function updateRequestStatus(id: string, status: string, client?: C
  * The function returns just `ok` and a display name; password hashes never
  * leave the database. The /login page calls this and, on `ok`, writes the
  * client-side signed-in flag that gates the (app) screens.
+ *
+ * Usernames are matched case-insensitively by resolving the stored spelling
+ * from `list_login_users` when the straight attempt fails, so `Sin` can sign in
+ * as `sin` even on a database whose `login_user` still compares exactly.
  */
 export async function loginUser(
   username: string,
@@ -568,12 +572,29 @@ export async function loginUser(
   client?: Client,
 ): Promise<{ ok: boolean; display_name: string | null }> {
   const supabase = getClient(client)
-  const { data, error } = await supabase
-    .rpc('login_user', { p_username: username, p_password: password })
-    .maybeSingle()
+  const attempt = async (name: string) => {
+    const { data, error } = await supabase
+      .rpc('login_user', { p_username: name, p_password: password })
+      .maybeSingle()
 
-  if (error) throw error
-  return { ok: data?.ok ?? false, display_name: data?.display_name ?? null }
+    if (error) throw error
+    return { ok: data?.ok ?? false, display_name: data?.display_name ?? null }
+  }
+
+  const direct = await attempt(username)
+  if (direct.ok) return direct
+
+  let canonical: string | null = null
+  try {
+    const users = await getLoginUsers(client)
+    const lower = username.toLowerCase()
+    canonical = users.find((u) => u.username.toLowerCase() === lower)?.username ?? null
+  } catch {
+    // A failed list call must not mask the credential answer below.
+  }
+
+  if (canonical && canonical !== username) return attempt(canonical)
+  return direct
 }
 
 export type LoginUserRow = {
@@ -599,6 +620,9 @@ export async function getLoginUsers(client?: Client): Promise<LoginUserRow[]> {
  * `create_login_user` (bcrypt via pgcrypto); the plaintext is sent over the
  * request and never stored. Returns false when the username is taken or the
  * password is too short (< 4 characters).
+ *
+ * Usernames are stored lowercased so sign-in is case-insensitive and two
+ * casings can never become separate accounts.
  */
 export async function createLoginUser(
   username: string,
@@ -607,8 +631,13 @@ export async function createLoginUser(
   client?: Client,
 ): Promise<boolean> {
   const supabase = getClient(client)
+  const normalized = username.trim().toLowerCase()
+
+  const existing = await getLoginUsers(client)
+  if (existing.some((u) => u.username.toLowerCase() === normalized)) return false
+
   const { data, error } = await supabase.rpc('create_login_user', {
-    p_username: username,
+    p_username: normalized,
     p_password: password,
     p_display_name: displayName?.trim() || null,
   })
