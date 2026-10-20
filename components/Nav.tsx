@@ -50,6 +50,13 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M8 17v-3" />
     </>
   ),
+  transfer: (
+    <>
+      <path d="M12 3v12" />
+      <path d="m7 8 5-5 5 5" />
+      <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+    </>
+  ),
   categories: (
     <>
       <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
@@ -99,6 +106,7 @@ const LINKS: { href: string; label: string; icon: keyof typeof ICONS }[] = [
   { href: '/requests', label: 'Requests', icon: 'requests' },
   { href: '/maintenance', label: 'Maintenance', icon: 'maintenance' },
   { href: '/reports', label: 'Reports', icon: 'reports' },
+  { href: '/import-export', label: 'Import / Export', icon: 'transfer' },
   { href: '/categories', label: 'Categories', icon: 'categories' },
   { href: '/suppliers', label: 'Suppliers', icon: 'suppliers' },
   { href: '/departments', label: 'Departments', icon: 'departments' },

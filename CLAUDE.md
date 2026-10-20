@@ -64,7 +64,9 @@ app/
   login/                  username + password sign-in form (no email). On success writes the
                           `inventory.signedIn` localStorage flag and opens the app; failed
                           sign-ins stay on this page
-  maintenance/            Maintenance History log: create + delete
+  maintenance/            Maintenance History log (item, brand/model, serial, category, cost,
+                          purchase date, supplier, department, maintenance date, remark): create + delete
+  import-export/           CSV export of every item + CSV import that upserts by barcode
   reports/                read-only rollups: valuation, purchases, requests, maintenance;
                           Print report button strips the shell and prints just the table
   settings/               company info (DB-backed, logo upload) + browser-only preferences
@@ -77,11 +79,12 @@ components/               flat: ui.tsx, Nav (links + Sign out), DataTable (cards
 hooks/useAsyncData.ts     loading/error/reload wrapper for client fetches
 lib/supabase/             client.ts, server.ts, env.ts
 lib/preferences.ts        browser-only preference storage + theme resolution (no server usage)
+lib/itemsCsv.ts           items CSV contract: column list, export mapping, parse + row validation
 services/inventoryService.ts   all data access, browser Supabase client
 supabase/schema.sql       tables + RLS: anon-only policies, generated in one DO block; logos bucket
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
-utils/format.ts, utils/errors.ts  live helpers
+utils/format.ts, utils/errors.ts, utils/csv.ts  live helpers (csv = dependency-free RFC 4180 parse/serialize)
 scripts/                  check-supabase-env.mjs, check-rls.mjs
 ```
 
@@ -94,13 +97,13 @@ removed again on 2026-10-10: `app/admin/` (the users screen and its shell),
 `services/adminUsersService.ts`, `components/PermissionPicker.tsx`,
 `scripts/check-admin-gate.mjs` and `package.json`'s `check:gate` are all gone.
 The standalone `app/(app)/warehouses/` screen was removed too (the `warehouses` table and the
-`getWarehouses()` service call survive — the inventory movement form and the audits screen still
-read the table).
+`getWarehouses()` service call survive — the Import / Export screen reads the table to resolve
+warehouse names).
 
-**Screens:** `/`, `/inventory`, `/purchases`, `/requests`, `/audits`,
-`/maintenance`, `/reports`, `/categories`, `/suppliers`, `/departments`, `/users`, `/settings` (prerendered
-static shells; data arrives on the client), plus `/login` — a standalone page outside the `(app)`
-shell that verifies a username + password against `app_users` and sets no session.
+**Screens:** `/`, `/inventory`, `/purchases`, `/requests`,
+`/maintenance`, `/reports`, `/import-export`, `/categories`, `/suppliers`, `/departments`, `/users`, `/settings`
+(prerendered static shells; data arrives on the client), plus `/login` — a standalone page outside
+the `(app)` shell that verifies a username + password against `app_users` and sets no session.
 `/sign-in`, `/sign-up`, `/warehouses`, `/transactions` and `/admin/users` 404.
 
 ---
@@ -273,6 +276,17 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     dead `SUPABASE_ACCESS_TOKEN` (item 4) still blocks §9, so the live table has only the old
     columns until a fresh PAT is written and `schema.sql` is re-run — the new form fields will
     fail against live PostgREST until then.
+16. **Closed 2026-10-20 — an Import / Export screen ships for inventory items.** `/import-export`
+    (nav link after Reports) exports every item to a CSV (`utils/csv.ts` writer, UTF-8 BOM for
+    Excel, CRLF; `lib/itemsCsv.ts` holds the 19-column contract — category/supplier/warehouse
+    travel as names, not ids) and imports a CSV back: rows whose `barcode` matches an existing
+    item update it, new or blank barcodes create items (`nextBarcode()` fills blanks), missing
+    categories/suppliers are created by name, unknown warehouse names are skipped with a warning.
+    Parsing and per-row validation are dependency-free (`utils/csv.ts` parser handles quotes,
+    doubled quotes, multiline fields, BOM; row errors surface in a preview table before anything
+    is written; a failed row does not reserve its barcode). Blank cells leave the column default
+    (create) or the current value (update). No new npm dependencies. Live-data only — no schema
+    change, so it works against the current live database.
 
 ---
 
