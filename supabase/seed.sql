@@ -96,12 +96,15 @@ INSERT INTO public.requests (id, dept, item_name, qty, date, requested_by, statu
 ON CONFLICT (id) DO NOTHING;
 
 -- Maintenance History
-INSERT INTO public.maintenance (id, item_name, date, description, cost, status) VALUES
-('MNT-00001', 'Epson Projector EB-X51', '2026-09-20', 'Lamp replaced and lens cleaned', 85.00, 'Completed'),
-('MNT-00002', 'Dell Latitude Laptop', '2026-09-24', 'Battery replaced under warranty', 0.00, 'Completed'),
-('MNT-00003', 'HP LaserJet Printer', '2026-09-30', 'Toner and pickup roller serviced', 45.50, 'In Progress'),
-('MNT-00004', 'Ceiling Fan', '2026-10-03', 'Bearing lubrication scheduled', 12.00, 'Scheduled'),
-('MNT-00005', 'Office Chair', '2026-09-18', 'Gas lift and casters repaired', 9.75, 'Completed')
+INSERT INTO public.maintenance
+    (id, item_name, brand, model, location, serial_number, category, status, cost, purchase_date, supplier_name, department_name, date, remark)
+VALUES
+('MNT-00001', 'Epson Projector EB-X51', 'Epson', 'EB-X51', 'Room 12', 'X4KJ9200123', 'Lamp and lens service', 'Completed', 85.00, '2023-08-15', 'PC Magic', 'IT Department', '2026-09-20', 'Mr. Vichea'),
+('MNT-00002', 'Dell Latitude Laptop', 'Dell', 'Latitude 5420', 'LEP', 'NXGCPST026703180', 'Battery replaced under warranty', 'Completed', 0.00, '2022-01-10', 'Dell Warranty Center', 'IT Department', '2026-09-24', 'Ms. Kunthea'),
+('MNT-00003', 'HP LaserJet Printer', 'HP', 'LaserJet Pro M404', 'Office', 'PHBCC8K12345', 'Toner and pickup roller serviced', 'In Progress', 45.50, '2021-06-03', 'PC Magic', 'IT Department', '2026-09-30', 'Mr. Makara'),
+('MNT-00004', 'Ceiling Fan', 'Panasonic', 'F-E14T2', 'Classroom A', NULL, 'Bearing lubrication', 'Scheduled', 12.00, '2019-05-20', 'Electric Fix Cambodia', 'Facilities', '2026-10-03', 'Scheduled with facilities'),
+('MNT-00005', 'Office Chair', NULL, NULL, 'Staff Room', NULL, 'Gas lift and casters repaired', 'Completed', 9.75, '2018-03-12', 'Local Workshop', 'Facilities', '2026-09-18', 'Ms. Bopha'),
+('MNT-00006', 'Laptop', 'Acer', 'Aspire E 14', 'LEP', 'NXGCPST026703180917600', 'Replace Battery', 'Completed', 38.00, '2017-10-02', 'PC Magic', 'LEP', '2026-06-07', 'San Serey')
 ON CONFLICT (id) DO NOTHING;
 
 -- Company Settings (single row; the Settings screen is the editor)

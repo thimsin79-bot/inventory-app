@@ -37,8 +37,8 @@ export default function LoginPage() {
     <main className="min-h-[100dvh] flex items-center justify-center bg-zinc-50 p-4 dark:bg-zinc-950">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Sign in</h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Inventory Management</p>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Inventory Management</h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Sign in to your account</p>
         </div>
 
         <Card className="p-6">

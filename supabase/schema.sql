@@ -118,16 +118,43 @@ CREATE TABLE IF NOT EXISTS public.requests (
 -- 9. Maintenance History
 -- A simple log of servicing and repairs: who/what was maintained, when, and at
 -- what cost. It is not tied to `items` by a foreign key -- the log keeps its own
--- item text so a record survives an item being renamed or deleted.
+-- item text (and brand/model/serial snapshots) so a record survives an item
+-- being renamed or deleted. Column order matches the Maintenance History table
+-- on screen: Item, Brand, Model, Location, Serial Number, Category Maintenance,
+-- Status, Cost, Date of Purchase, Service Supplier, Department, Date
+-- Maintenance (`date`), User Remark.
 CREATE TABLE IF NOT EXISTS public.maintenance (
     id TEXT PRIMARY KEY,
     item_name TEXT NOT NULL,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    description TEXT,
-    cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    brand TEXT,
+    model TEXT,
+    location TEXT,
+    serial_number TEXT,
+    category TEXT,
     status TEXT NOT NULL DEFAULT 'Completed',
+    cost NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    purchase_date DATE,
+    supplier_name TEXT,
+    department_name TEXT,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    remark TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- The live table predates this layout and CREATE IF NOT EXISTS is a no-op
+-- there, so upgrade it in place. Every statement is idempotent; `description`
+-- was replaced by `category` + `remark` and the live table holds no rows to
+-- lose (cleared 2026-10-10).
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS brand TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS purchase_date DATE;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS supplier_name TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS department_name TEXT;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS remark TEXT;
+ALTER TABLE public.maintenance DROP COLUMN IF EXISTS description;
 
 -- PostgREST caches the schema it exposes; without this the API keeps answering
 -- "Could not find the table 'public.maintenance' in the schema cache" until its

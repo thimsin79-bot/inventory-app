@@ -295,28 +295,52 @@ export interface Database {
         Row: {
           id: string
           item_name: string
-          date: string
-          description: string | null
-          cost: number
+          brand: string | null
+          model: string | null
+          location: string | null
+          serial_number: string | null
+          category: string | null
           status: string
+          cost: number
+          purchase_date: string | null
+          supplier_name: string | null
+          department_name: string | null
+          date: string
+          remark: string | null
           created_at: string
         }
         Insert: {
           id?: string
           item_name: string
-          date?: string
-          description?: string | null
-          cost?: number
+          brand?: string | null
+          model?: string | null
+          location?: string | null
+          serial_number?: string | null
+          category?: string | null
           status?: string
+          cost?: number
+          purchase_date?: string | null
+          supplier_name?: string | null
+          department_name?: string | null
+          date?: string
+          remark?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           item_name?: string
-          date?: string
-          description?: string | null
-          cost?: number
+          brand?: string | null
+          model?: string | null
+          location?: string | null
+          serial_number?: string | null
+          category?: string | null
           status?: string
+          cost?: number
+          purchase_date?: string | null
+          supplier_name?: string | null
+          department_name?: string | null
+          date?: string
+          remark?: string | null
           created_at?: string
         }
         Relationships: []

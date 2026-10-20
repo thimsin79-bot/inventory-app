@@ -15,9 +15,26 @@ type Row = Tables<'maintenance'>
 
 const STATUSES = ['Completed', 'In Progress', 'Scheduled']
 
-const emptyForm = () => ({ item_name: '', date: today(), description: '', cost: '0', status: 'Completed' })
+const emptyForm = () => ({
+  item_name: '',
+  brand: '',
+  model: '',
+  location: '',
+  serial_number: '',
+  category: '',
+  status: 'Completed',
+  cost: '0',
+  purchase_date: '',
+  supplier_name: '',
+  department_name: '',
+  date: today(),
+  remark: '',
+})
 
+type Form = ReturnType<typeof emptyForm>
 type ErrorMap = Partial<Record<'item_name' | 'date' | 'cost', string>>
+
+const trimmed = (value: string) => value.trim() || null
 
 export default function MaintenancePage() {
   const [busy, setBusy] = useState(false)
@@ -31,7 +48,7 @@ export default function MaintenancePage() {
 
   const state = useAsyncData(getMaintenance)
 
-  const set = (patch: Partial<ReturnType<typeof emptyForm>>) => setForm((f) => ({ ...f, ...patch }))
+  const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }))
 
   function openCreate() {
     setForm(emptyForm())
@@ -44,7 +61,7 @@ export default function MaintenancePage() {
     const cost = Number(form.cost)
     const errors: ErrorMap = {}
     if (!form.item_name.trim()) errors.item_name = 'Item name is required.'
-    if (!form.date) errors.date = 'A service date is required.'
+    if (!form.date) errors.date = 'A maintenance date is required.'
     if (!Number.isFinite(cost) || cost < 0) errors.cost = 'Zero or a positive number.'
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
@@ -54,10 +71,18 @@ export default function MaintenancePage() {
     try {
       await createMaintenance({
         item_name: form.item_name.trim(),
-        date: form.date,
-        description: form.description.trim() || null,
-        cost,
+        brand: trimmed(form.brand),
+        model: trimmed(form.model),
+        location: trimmed(form.location),
+        serial_number: trimmed(form.serial_number),
+        category: trimmed(form.category),
         status: form.status,
+        cost,
+        purchase_date: trimmed(form.purchase_date),
+        supplier_name: trimmed(form.supplier_name),
+        department_name: trimmed(form.department_name),
+        date: form.date,
+        remark: trimmed(form.remark),
       })
       setCreating(false)
       setNotice('Maintenance record added')
@@ -86,12 +111,19 @@ export default function MaintenancePage() {
   }
 
   const columns: Column<Row>[] = [
-    { key: 'id', header: 'Ref', render: (r) => <span className="font-mono text-xs">{r.id}</span> },
-    { key: 'date', header: 'Date', render: (r) => <span className="tabular-nums">{formatDate(r.date)}</span> },
     { key: 'item', header: 'Item', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.item_name}</span> },
-    { key: 'description', header: 'Description', render: (r) => r.description ?? <span className="text-zinc-400">—</span> },
-    { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{formatMoney(r.cost)}</span> },
+    { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
+    { key: 'model', header: 'Model', render: (r) => r.model ?? <span className="text-zinc-400">—</span> },
+    { key: 'location', header: 'Location', render: (r) => r.location ?? <span className="text-zinc-400">—</span> },
+    { key: 'serial_number', header: 'Serial Number', render: (r) => <span className="font-mono text-xs">{r.serial_number ?? <span className="font-sans text-zinc-400">—</span>}</span> },
+    { key: 'category', header: 'Category Maintenance', render: (r) => r.category ?? <span className="text-zinc-400">—</span> },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{formatMoney(r.cost)}</span> },
+    { key: 'purchase_date', header: 'Date of Purchase', render: (r) => <span className="tabular-nums">{formatDate(r.purchase_date)}</span> },
+    { key: 'supplier_name', header: 'Service Supplier', render: (r) => r.supplier_name ?? <span className="text-zinc-400">—</span> },
+    { key: 'department_name', header: 'Department', render: (r) => r.department_name ?? <span className="text-zinc-400">—</span> },
+    { key: 'date', header: 'Date Maintenance', render: (r) => <span className="tabular-nums">{formatDate(r.date)}</span> },
+    { key: 'remark', header: 'User Remark', render: (r) => r.remark ?? <span className="text-zinc-400">—</span> },
     {
       key: 'actions',
       header: '',
@@ -150,11 +182,20 @@ export default function MaintenancePage() {
           <Field label="Item" htmlFor="mt-item" required error={formErrors.item_name} className="sm:col-span-2">
             <Input id="mt-item" value={form.item_name} onChange={(e) => set({ item_name: e.target.value })} />
           </Field>
-          <Field label="Date" htmlFor="mt-date" required error={formErrors.date}>
-            <Input id="mt-date" type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />
+          <Field label="Brand" htmlFor="mt-brand">
+            <Input id="mt-brand" value={form.brand} onChange={(e) => set({ brand: e.target.value })} />
           </Field>
-          <Field label="Cost" htmlFor="mt-cost" required error={formErrors.cost}>
-            <Input id="mt-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => set({ cost: e.target.value })} />
+          <Field label="Model" htmlFor="mt-model">
+            <Input id="mt-model" value={form.model} onChange={(e) => set({ model: e.target.value })} />
+          </Field>
+          <Field label="Location" htmlFor="mt-location">
+            <Input id="mt-location" value={form.location} onChange={(e) => set({ location: e.target.value })} />
+          </Field>
+          <Field label="Serial Number" htmlFor="mt-serial">
+            <Input id="mt-serial" value={form.serial_number} onChange={(e) => set({ serial_number: e.target.value })} />
+          </Field>
+          <Field label="Category Maintenance" htmlFor="mt-category">
+            <Input id="mt-category" value={form.category} onChange={(e) => set({ category: e.target.value })} placeholder="Replace battery, toner service…" />
           </Field>
           <Field label="Status" htmlFor="mt-status">
             <Select id="mt-status" value={form.status} onChange={(e) => set({ status: e.target.value })}>
@@ -165,8 +206,23 @@ export default function MaintenancePage() {
               ))}
             </Select>
           </Field>
-          <Field label="Description" htmlFor="mt-desc" className="sm:col-span-2">
-            <Textarea id="mt-desc" value={form.description} onChange={(e) => set({ description: e.target.value })} placeholder="What was done…" />
+          <Field label="Cost" htmlFor="mt-cost" required error={formErrors.cost}>
+            <Input id="mt-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => set({ cost: e.target.value })} />
+          </Field>
+          <Field label="Date of Purchase" htmlFor="mt-purchase">
+            <Input id="mt-purchase" type="date" value={form.purchase_date} onChange={(e) => set({ purchase_date: e.target.value })} />
+          </Field>
+          <Field label="Service Supplier" htmlFor="mt-supplier">
+            <Input id="mt-supplier" value={form.supplier_name} onChange={(e) => set({ supplier_name: e.target.value })} />
+          </Field>
+          <Field label="Department" htmlFor="mt-department">
+            <Input id="mt-department" value={form.department_name} onChange={(e) => set({ department_name: e.target.value })} />
+          </Field>
+          <Field label="Date Maintenance" htmlFor="mt-date" required error={formErrors.date}>
+            <Input id="mt-date" type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />
+          </Field>
+          <Field label="User Remark" htmlFor="mt-remark" className="sm:col-span-2">
+            <Textarea id="mt-remark" value={form.remark} onChange={(e) => set({ remark: e.target.value })} placeholder="Notes from the user…" />
           </Field>
         </div>
       </Modal>

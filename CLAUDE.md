@@ -46,7 +46,7 @@ the Vercel Git integration.
   create → true, duplicate username → false, password under 4 chars → false, list yields only
   `username`/`display_name`/`created_at`, delete → true (§5 item 10).
 - **No test framework, and deliberately none.** Three dependency-free Node scripts hold the logic a
-  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 65
+  test runner would otherwise cover: `npm run check` = `check:env` + `check:rls` (22 / 61
   assertions). `check:env` imports `lib/supabase/env.ts` directly via Node's type
   stripping and `check:rls` reads `supabase/schema.sql`. The session-and-permission check
   (`check:auth`) and the Admin Console gate check (`check:gate`) were deleted with their
@@ -167,7 +167,7 @@ Eight of the ten tables use `TEXT` primary keys with no default, so ids are gene
 
 Seeded row counts (from `supabase/seed.sql`, re-verified 2026-10-10):
 items 21, categories 9, warehouses 5, suppliers 5, departments 6, purchases 6,
-requests 7, audits 5, maintenance 5, company_settings 1, app_users 1
+requests 7, maintenance 6, company_settings 1, app_users 1
 (`admin`, bcrypt hash of `admin123` — change it by UPDATE in SQL; you will not find a
 hash-verification path in the client, only the `login_user` function).
 
@@ -260,6 +260,19 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     and related check/smoke references. The live database table remains (no token to drop it);
     the schema file now omits audits, so re-applying it won't create it. `getWarehouses()` and
     the `warehouses` table stay (still referenced).
+15. **Closed 2026-10-20 — the Maintenance History screen was rebuilt to the richer layout.**
+    The `maintenance` table gained `brand`, `model`, `location`, `serial_number`, `category`,
+    `purchase_date`, `supplier_name`, `department_name` and `remark` (all nullable TEXT/DATE
+    snapshots — still no FK to `items`), and `description` was dropped (replaced by `category` +
+    `remark`; the live table was empty). The screen's form and table now render every column from
+    the requested layout: Item, Brand, Model, Location, Serial Number, Category Maintenance,
+    Status, Cost, Date of Purchase, Service Supplier, Department, Date Maintenance (`date`,
+    required, defaults to today), User Remark. `schema.sql` includes idempotent
+    `ADD COLUMN IF NOT EXISTS` / `DROP COLUMN IF EXISTS description` ALTERs after the
+    `CREATE TABLE IF NOT EXISTS` so re-applying upgrades the existing live table. **Caveat:** the
+    dead `SUPABASE_ACCESS_TOKEN` (item 4) still blocks §9, so the live table has only the old
+    columns until a fresh PAT is written and `schema.sql` is re-run — the new form fields will
+    fail against live PostgREST until then.
 
 ---
 
@@ -310,7 +323,7 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 ## 7. Verify Before Calling Anything Done
 
 ```powershell
-npm run check          # check:env + check:rls (22 / 65)
+npm run check          # check:env + check:rls (22 / 61)
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -326,7 +339,7 @@ you reintroduce a role ladder or widen RLS to a `authenticated` split** — a gu
 fail is not a guard, so prove a new assertion by breaking the code it covers first.
 
 `check:gate` was the equivalent for `lib/adminGate.ts` and the two Admin Console routes; it was
-deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 65).
+deleted with the module on 2026-10-10, leaving `check` at `check:env` + `check:rls` (22 / 61).
 
 `npm run smoke` (`scripts/smoke-forms.mjs`) is the live counterpart and it is **destructive**: it
 truncates the nine data tables, then for every screen creates, reads back and edits one row through
