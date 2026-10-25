@@ -184,11 +184,6 @@ export default function InventoryPage() {
       render: (r) => <span className="tabular-nums">{Number(r.price).toFixed(2)}</span>,
     },
     {
-      key: 'value',
-      header: 'Value',
-      render: (r) => <span className="tabular-nums text-zinc-900 dark:text-zinc-100">{(r.qty * Number(r.price)).toFixed(2)}</span>,
-    },
-    {
       key: 'serial',
       header: 'Serial No.',
       render: (r) =>
