@@ -327,6 +327,23 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     `npm run check`. First run on 2026-10-25 loaded 340 items (51 laptops, 35 desktops, 254 others).
     Supplier spellings are copied as the sheet has them (e.g. `Asain IT` / `Asian IT` / `Asean IT`), so
     merge duplicates in the Suppliers screen.
+23. **Closed 2026-10-25 — responsive pass over every screen.** Audited all 12 screens + `/login` at
+    320 / 375 / 768 / 1024 / 1440 px with headless Edge over CDP (signed in via the
+    `inventory.signedIn` flag): no page overflows horizontally at any width. Two real problems fixed.
+    (1) Below `lg` the sidebar nav was a sideways-scrolling strip that showed ~3 of 12 links with no
+    hint of the rest; `components/Nav.tsx` now shows a **Menu** button (current page on the right)
+    that expands a 2/3-column grid of every link plus Sign out; picking a link closes it, and `lg+`
+    is unchanged. (2) Wide tables (Inventory has 15 columns, Maintenance 14) scroll sideways inside
+    their own container on sm–xl screens, which hid Edit / Delete off-screen; `DataTable` now pins
+    any column keyed `actions` to the right edge (`sticky right-0` with a background and edge
+    shadow), so all eight screens with row actions keep them reachable. Also `whitespace-nowrap` on
+    the inventory barcode so `SH-PJ00034` no longer wraps. `lint`, `tsc`, `build`, `check` (61) green.
+    The audit script lives outside the repo (`d:\ICT\downloads\responsive-audit.mjs`, Windows Edge
+    path hard-coded); it needs the dev server on :3000.
+24. **Closed 2026-10-25 — the four summary tiles were removed from the Inventory screen.** Items
+    tracked / Units on hand / Stock value / At or below min and their `stats` memo are gone from
+    `app/(app)/inventory/page.tsx` per request. The header still shows the item count; low-stock rows
+    still get the amber row tint. Reports keeps its own rollups.
 
 ---
 
@@ -352,7 +369,10 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
   `/login` when the session flag is missing, and screens render their content directly.
 - Write screens always show their create/edit/delete actions — no `can(...)` guards.
 - `components/Nav.tsx` links the 12 screens; it no longer filters by permission. A new screen →
-  add its entry to `LINKS` and a route under `app/(app)/`.
+  add its entry to `LINKS` and a route under `app/(app)/`. Below `lg` the links sit behind a Menu
+  button (state is local; links close it), at `lg+` it is the always-visible sidebar.
+- A `DataTable` column with `key: 'actions'` is pinned to the right edge on `sm+` (see §5 item 23);
+  name a row-actions column exactly that to get the behaviour.
 - `DataTable` paginates client-side using the user's rows-per-page preference, so a screen does
   not manage paging state itself. The pager only appears when a table exceeds the page size. It
   is responsive by default: below `sm` each row stacks as a label/value card; on `sm+` the real

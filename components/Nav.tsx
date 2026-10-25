@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { clearSession } from '@/lib/session'
 
 const ICONS: Record<string, ReactNode> = {
@@ -117,6 +117,10 @@ const LINKS: { href: string; label: string; icon: keyof typeof ICONS }[] = [
 export function Nav() {
   const pathname = usePathname()
   const router = useRouter()
+  // Below `lg` the sidebar is a top bar: all links live behind a Menu button so
+  // none are hidden off-screen in a sideways-scrolling strip.
+  const [open, setOpen] = useState(false)
+  const current = LINKS.find((l) => (l.href === '/' ? pathname === '/' : pathname.startsWith(l.href)))
 
   function handleSignOut() {
     clearSession()
@@ -125,59 +129,78 @@ export function Nav() {
 
   return (
     <div className="flex flex-1 flex-col gap-1">
-      <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-        {LINKS.map((link) => {
-          const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              aria-current={active ? 'page' : undefined}
-              className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
-              }`}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="size-4 shrink-0"
-                aria-hidden="true"
-              >
-                {ICONS[link.icon]}
-              </svg>
-              {link.label}
-            </Link>
-          )
-        })}
-      </nav>
-
-      <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-        <button
-          onClick={handleSignOut}
-          className="inline-flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-4 shrink-0"
-            aria-hidden="true"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="m16 17 5-5-5-5" />
-            <path d="M21 12H9" />
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="app-nav"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 lg:hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+      >
+        <span className="inline-flex items-center gap-2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-4 shrink-0" aria-hidden="true">
+            {open ? <path d="M18 6 6 18M6 6l12 12" /> : <path d="M4 6h16M4 12h16M4 18h16" />}
           </svg>
-          Sign out
-        </button>
+          Menu
+        </span>
+        <span className="truncate text-zinc-500 dark:text-zinc-400">{current?.label}</span>
+      </button>
+
+      <div id="app-nav" className={`${open ? 'flex' : 'hidden'} flex-1 flex-col gap-1 lg:flex`}>
+        <nav className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:flex lg:flex-col">
+          {LINKS.map((link) => {
+            const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                aria-current={active ? 'page' : undefined}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors lg:whitespace-nowrap ${
+                  active
+                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                    : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+                }`}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="size-4 shrink-0"
+                  aria-hidden="true"
+                >
+                  {ICONS[link.icon]}
+                </svg>
+                {link.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+          <button
+            onClick={handleSignOut}
+            className="inline-flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-4 shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   getInventoryItems,
   createItem,
@@ -89,19 +89,6 @@ export default function InventoryPage() {
 
   const categoriesData = categories.data ?? []
   const suppliersData = suppliers.data ?? []
-
-  const stats = useMemo(() => {
-    const rows = items.data ?? []
-    let units = 0
-    let value = 0
-    let lowStock = 0
-    for (const i of rows) {
-      units += i.qty
-      value += i.qty * Number(i.price)
-      if (i.qty <= i.min_qty) lowStock++
-    }
-    return { totalItems: rows.length, units, value, lowStock }
-  }, [items.data])
 
   const run = useCallback(
     async (fn: () => Promise<unknown>, success: string) => {
@@ -219,7 +206,7 @@ export default function InventoryPage() {
     {
       key: 'barcode',
       header: 'Barcode',
-      render: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
+      render: (r) => <span className="font-mono text-xs whitespace-nowrap">{r.barcode}</span>,
     },
     {
       key: 'name',
@@ -317,13 +304,6 @@ export default function InventoryPage() {
     ),
   })
 
-  const tiles = [
-    { label: 'Items tracked', value: stats.totalItems.toLocaleString() },
-    { label: 'Units on hand', value: stats.units.toLocaleString() },
-    { label: 'Stock value', value: stats.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
-    { label: 'At or below min', value: stats.lowStock.toLocaleString(), tone: stats.lowStock > 0 ? 'warn' : 'good' },
-  ] as const
-
   return (
     <>
       <PageHeader
@@ -375,23 +355,6 @@ export default function InventoryPage() {
       {actionError && <Notice tone="bad" className="mb-3">{actionError}</Notice>}
 
       <AsyncBoundary loading={items.loading} error={items.error} errorCode={items.errorCode} onRetry={items.reload}>
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {tiles.map((t) => (
-            <Card key={t.label} className="px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t.label}</p>
-              <p
-                className={`mt-1 text-2xl font-semibold tabular-nums ${
-                  'tone' in t && t.tone === 'warn'
-                    ? 'text-amber-700 dark:text-amber-400'
-                    : 'text-zinc-900 dark:text-zinc-50'
-                }`}
-              >
-                {t.value}
-              </p>
-            </Card>
-          ))}
-        </div>
-
         <Card>
           <DataTable
             columns={columns}

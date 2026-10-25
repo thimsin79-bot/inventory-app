@@ -4,6 +4,12 @@ import { useState, type ReactNode } from 'react'
 import { Button } from './ui'
 import { usePreferences } from '@/components/PreferencesProvider'
 
+// The row-actions column pins to the right edge so Edit / Delete stay reachable
+// when a wide table scrolls sideways inside its container (tablet / laptop widths).
+const STICKY_ACTIONS =
+  'sticky right-0 bg-white shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.2)] dark:bg-zinc-950 dark:shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.8)]'
+const pin = (key: string) => (key === 'actions' ? STICKY_ACTIONS : '')
+
 export type Column<T> = {
   key: string
   header: string
@@ -61,7 +67,7 @@ export function DataTable<T>({
                 <th
                   key={c.key}
                   scope="col"
-                  className={`whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 ${c.className ?? ''}`}
+                  className={`whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 ${pin(c.key)} ${c.className ?? ''}`}
                 >
                   {c.header}
                 </th>
@@ -79,7 +85,7 @@ export function DataTable<T>({
                 {columns.map((c) => (
                   <td
                     key={c.key}
-                    className={`px-4 py-2.5 align-middle text-zinc-700 dark:text-zinc-300 ${c.className ?? ''}`}
+                    className={`px-4 py-2.5 align-middle text-zinc-700 dark:text-zinc-300 ${pin(c.key)} ${c.className ?? ''}`}
                   >
                     {c.render(row)}
                   </td>
