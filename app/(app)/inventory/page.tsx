@@ -9,15 +9,16 @@ import {
   getCategories,
   getSuppliers,
   nextBarcode,
+  createMaintenance,
 } from '@/services/inventoryService'
 import type { Tables } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
-import { formatDate } from '@/utils/format'
+import { formatDate, today } from '@/utils/format'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Input, Notice, PageHeader, Select, Badge } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Badge, Textarea } from '@/components/ui'
 import {
   EMPTY_ITEM,
   ItemFormFields,
@@ -57,8 +58,25 @@ export default function InventoryPage() {
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<ItemRow | null>(null)
   const [moving, setMoving] = useState<ItemRow | null>(null)
+  const [maintaining, setMaintaining] = useState<ItemRow | null>(null)
   const [form, setForm] = useState<ItemFormState>(EMPTY_ITEM)
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof ItemFormState, string>>>({})
+  const [maintainForm, setMaintainForm] = useState({
+    item_name: '',
+    brand: '',
+    model: '',
+    location: '',
+    serial_number: '',
+    category: '',
+    status: 'Completed',
+    cost: '0',
+    purchase_date: '',
+    supplier_name: '',
+    department_name: '',
+    date: today(),
+    remark: '',
+  })
+  const [maintainErrors, setMaintainErrors] = useState<Partial<Record<'item_name' | 'date' | 'cost', string>>>({})
 
   const loadItems = useCallback(
     () => getInventoryItems(undefined, { categoryId, search, purchaseDate }) as Promise<ItemRow[]>,
@@ -137,6 +155,64 @@ export default function InventoryPage() {
     if (!moving) return
     const ok = await run(() => updateItem(moving.id, { qty: moving.qty + delta }), 'Quantity adjusted')
     if (ok) setMoving(null)
+  }
+
+  function openMaintain(r: ItemRow) {
+    setMaintainForm({
+      item_name: r.name,
+      brand: r.brand ?? '',
+      model: r.model ?? '',
+      location: r.location ?? '',
+      serial_number: r.serial_number ?? '',
+      category: r.category?.name ?? '',
+      status: 'Completed',
+      cost: '0',
+      purchase_date: r.purchase_date ?? '',
+      supplier_name: r.supplier?.company ?? '',
+      department_name: r.department_location ?? '',
+      date: today(),
+      remark: r.remark ?? '',
+    })
+    setMaintainErrors({})
+    setActionError(null)
+    setMaintaining(r)
+  }
+
+  async function submitMaintenance() {
+    if (!maintaining) return
+    const cost = Number(maintainForm.cost)
+    const errors: Partial<Record<'item_name' | 'date' | 'cost', string>> = {}
+    if (!maintainForm.item_name.trim()) errors.item_name = 'Item name is required.'
+    if (!maintainForm.date) errors.date = 'A maintenance date is required.'
+    if (!Number.isFinite(cost) || cost < 0) errors.cost = 'Zero or a positive number.'
+    setMaintainErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    const trimmed = (v: string) => v.trim() || null
+
+    const ok = await run(
+      () =>
+        createMaintenance({
+          item_name: maintainForm.item_name.trim(),
+          brand: trimmed(maintainForm.brand),
+          model: trimmed(maintainForm.model),
+          location: trimmed(maintainForm.location),
+          serial_number: trimmed(maintainForm.serial_number),
+          category: trimmed(maintainForm.category),
+          status: maintainForm.status,
+          cost,
+          purchase_date: trimmed(maintainForm.purchase_date),
+          supplier_name: trimmed(maintainForm.supplier_name),
+          department_name: trimmed(maintainForm.department_name),
+          date: maintainForm.date,
+          remark: trimmed(maintainForm.remark),
+        }),
+      `Added maintenance record for ${maintainForm.item_name.trim()}`,
+    )
+
+    if (ok) {
+      setMaintaining(null)
+    }
   }
 
   const columns: Column<ItemRow>[] = [
@@ -225,6 +301,9 @@ export default function InventoryPage() {
     className: 'text-right',
     render: (r) => (
       <div className="flex justify-end gap-1">
+        <Button size="sm" onClick={() => openMaintain(r)}>
+          Maintain
+        </Button>
         <Button size="sm" onClick={() => setMoving(r)}>
           Move
         </Button>
@@ -405,6 +484,130 @@ export default function InventoryPage() {
           Delete <span className="font-medium text-zinc-900 dark:text-zinc-100">{deleting?.name}</span> (
           {deleting?.barcode})? This cannot be undone.
         </p>
+      </Modal>
+
+      <Modal
+        open={maintaining !== null}
+        title={`Add to Maintenance — ${maintaining?.name ?? ''}`}
+        onClose={() => setMaintaining(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMaintaining(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={submitMaintenance} disabled={busy}>
+              {busy ? 'Saving…' : 'Add to Maintenance'}
+            </Button>
+          </>
+        }
+      >
+        {actionError && <Notice tone="bad" className="mb-3">{actionError}</Notice>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Item" htmlFor="im-item" required error={maintainErrors.item_name} className="sm:col-span-2">
+            <Input
+              id="im-item"
+              value={maintainForm.item_name}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, item_name: e.target.value }))}
+            />
+          </Field>
+          <Field label="Brand" htmlFor="im-brand">
+            <Input
+              id="im-brand"
+              value={maintainForm.brand}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, brand: e.target.value }))}
+            />
+          </Field>
+          <Field label="Model" htmlFor="im-model">
+            <Input
+              id="im-model"
+              value={maintainForm.model}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, model: e.target.value }))}
+            />
+          </Field>
+          <Field label="Location" htmlFor="im-location">
+            <Input
+              id="im-location"
+              value={maintainForm.location}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, location: e.target.value }))}
+            />
+          </Field>
+          <Field label="Serial Number" htmlFor="im-serial">
+            <Input
+              id="im-serial"
+              value={maintainForm.serial_number}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, serial_number: e.target.value }))}
+            />
+          </Field>
+          <Field label="Category Maintenance" htmlFor="im-category">
+            <Input
+              id="im-category"
+              value={maintainForm.category}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, category: e.target.value }))}
+              placeholder="Replace battery, toner service…"
+            />
+          </Field>
+          <Field label="Status" htmlFor="im-status">
+            <Select
+              id="im-status"
+              value={maintainForm.status}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, status: e.target.value }))}
+            >
+              {['Completed', 'In Progress', 'Scheduled'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Cost" htmlFor="im-cost" required error={maintainErrors.cost}>
+            <Input
+              id="im-cost"
+              type="number"
+              step="0.01"
+              min="0"
+              value={maintainForm.cost}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, cost: e.target.value }))}
+            />
+          </Field>
+          <Field label="Date of Purchase" htmlFor="im-purchase">
+            <Input
+              id="im-purchase"
+              type="date"
+              value={maintainForm.purchase_date}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, purchase_date: e.target.value }))}
+            />
+          </Field>
+          <Field label="Service Supplier" htmlFor="im-supplier">
+            <Input
+              id="im-supplier"
+              value={maintainForm.supplier_name}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, supplier_name: e.target.value }))}
+            />
+          </Field>
+          <Field label="Department" htmlFor="im-department">
+            <Input
+              id="im-department"
+              value={maintainForm.department_name}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, department_name: e.target.value }))}
+            />
+          </Field>
+          <Field label="Date Maintenance" htmlFor="im-date" required error={maintainErrors.date}>
+            <Input
+              id="im-date"
+              type="date"
+              value={maintainForm.date}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, date: e.target.value }))}
+            />
+          </Field>
+          <Field label="User Remark" htmlFor="im-remark" className="sm:col-span-2">
+            <Textarea
+              id="im-remark"
+              value={maintainForm.remark}
+              onChange={(e) => setMaintainForm((f) => ({ ...f, remark: e.target.value }))}
+              placeholder="Notes from the user…"
+            />
+          </Field>
+        </div>
       </Modal>
     </>
   )

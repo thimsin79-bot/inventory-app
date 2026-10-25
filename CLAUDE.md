@@ -296,6 +296,11 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
 18. **Closed 2026-10-25 — the Value column was removed from the inventory table.** In
     `app/(app)/inventory/page.tsx`, the `Value` column (`qty * price`) was removed from the
     DataTable `columns` list per request.
+19. **Closed 2026-10-25 — Added 'Maintain' action button to Inventory table.** In
+    `app/(app)/inventory/page.tsx`, each row in the inventory table now has a `Maintain` action button.
+    Clicking it opens a pre-filled maintenance modal populated with that item's name, brand, model,
+    location, serial number, category, purchase date, supplier, department, and remark, allowing users
+    to quickly log servicing or repairs to the `maintenance` table.
 
 ---
 
