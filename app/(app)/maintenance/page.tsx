@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { getMaintenance, createMaintenance, deleteMaintenance } from '@/services/inventoryService'
+import { getMaintenance, createMaintenance, updateMaintenance, deleteMaintenance } from '@/services/inventoryService'
 import type { Tables } from '@/types/database.types'
 import { errorMessage } from '@/utils/errors'
 import { formatDate, formatMoney, today } from '@/utils/format'
@@ -41,6 +41,7 @@ export default function MaintenancePage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<Row | null>(null)
   const [deleting, setDeleting] = useState<Row | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState<ErrorMap>({})
@@ -57,6 +58,27 @@ export default function MaintenancePage() {
     setCreating(true)
   }
 
+  function openEdit(row: Row) {
+    setForm({
+      item_name: row.item_name,
+      brand: row.brand ?? '',
+      model: row.model ?? '',
+      location: row.location ?? '',
+      serial_number: row.serial_number ?? '',
+      category: row.category ?? '',
+      status: row.status,
+      cost: String(row.cost),
+      purchase_date: row.purchase_date ?? '',
+      supplier_name: row.supplier_name ?? '',
+      department_name: row.department_name ?? '',
+      date: row.date,
+      remark: row.remark ?? '',
+    })
+    setFormErrors({})
+    setFormError(null)
+    setEditing(row)
+  }
+
   async function submit() {
     const cost = Number(form.cost)
     const errors: ErrorMap = {}
@@ -69,7 +91,7 @@ export default function MaintenancePage() {
     setBusy(true)
     setFormError(null)
     try {
-      await createMaintenance({
+      const payload = {
         item_name: form.item_name.trim(),
         brand: trimmed(form.brand),
         model: trimmed(form.model),
@@ -83,9 +105,17 @@ export default function MaintenancePage() {
         department_name: trimmed(form.department_name),
         date: form.date,
         remark: trimmed(form.remark),
-      })
-      setCreating(false)
-      setNotice('Maintenance record added')
+      }
+
+      if (editing) {
+        await updateMaintenance(editing.id, payload)
+        setEditing(null)
+        setNotice('Maintenance record updated')
+      } else {
+        await createMaintenance(payload)
+        setCreating(false)
+        setNotice('Maintenance record added')
+      }
       state.reload()
     } catch (e) {
       setFormError(errorMessage(e))
@@ -129,9 +159,14 @@ export default function MaintenancePage() {
       header: '',
       className: 'text-right',
       render: (r) => (
-        <Button size="sm" variant="danger" onClick={() => { setError(null); setDeleting(r) }}>
-          Delete
-        </Button>
+        <div className="flex justify-end gap-1">
+          <Button size="sm" onClick={() => { setError(null); openEdit(r) }}>
+            Edit
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => { setError(null); setDeleting(r) }}>
+            Delete
+          </Button>
+        </div>
       ),
     },
   ]
@@ -163,16 +198,16 @@ export default function MaintenancePage() {
       </Card>
 
       <Modal
-        open={creating}
-        title="New maintenance record"
-        onClose={() => setCreating(false)}
+        open={creating || editing !== null}
+        title={editing ? `Edit ${editing.item_name}` : 'New maintenance record'}
+        onClose={() => { setCreating(false); setEditing(null) }}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setCreating(false)} disabled={busy}>
+            <Button variant="secondary" onClick={() => { setCreating(false); setEditing(null) }} disabled={busy}>
               Cancel
             </Button>
             <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? 'Saving…' : 'Add record'}
+              {busy ? 'Saving…' : editing ? 'Update' : 'Add record'}
             </Button>
           </>
         }

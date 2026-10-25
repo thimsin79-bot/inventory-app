@@ -307,6 +307,11 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     back to the live schema columns, packaging metadata into `description`. `getMaintenance` unpacks
     them back so all fields display properly. Running the idempotent `ALTER TABLE` block from `schema.sql`
     in Supabase SQL editor upgrades the live table permanently.
+21. **Closed 2026-10-25 — Added Edit and Update functionality to Maintenance table.** In
+    `app/(app)/maintenance/page.tsx`, each row now has an `Edit` action button alongside `Delete`.
+    Clicking `Edit` opens the modal pre-filled with that record's values, allowing users to modify
+    fields and save with the `Update` button via the newly added `updateMaintenance` function in
+    `services/inventoryService.ts`.
 
 ---
 

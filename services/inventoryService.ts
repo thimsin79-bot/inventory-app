@@ -499,6 +499,60 @@ export async function createMaintenance(record: Inserts<'maintenance'>, client?:
 }
 
 /**
+ * Update a maintenance history record
+ */
+export async function updateMaintenance(id: string, updates: Updates<'maintenance'>, client?: Client) {
+  const supabase = getClient(client)
+
+  // Try standard update with all expanded columns
+  const { data, error } = await supabase
+    .from('maintenance')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (!error) return data
+
+  // If live database has not run the ALTER TABLE migration yet (missing 'brand' column),
+  // fall back to the live schema and pack the extra metadata into description.
+  if (error.message?.includes("'brand'") || error.message?.includes('schema cache')) {
+    const details = [
+      updates.brand && `Brand: ${updates.brand}`,
+      updates.model && `Model: ${updates.model}`,
+      updates.location && `Location: ${updates.location}`,
+      updates.serial_number && `Serial: ${updates.serial_number}`,
+      updates.category && `Category: ${updates.category}`,
+      updates.supplier_name && `Supplier: ${updates.supplier_name}`,
+      updates.department_name && `Department: ${updates.department_name}`,
+      updates.purchase_date && `Purchase Date: ${updates.purchase_date}`,
+      updates.remark && `Remark: ${updates.remark}`,
+    ]
+      .filter(Boolean)
+      .join(' | ')
+
+    const fallbackRecord: Record<string, unknown> = {}
+    if (updates.item_name !== undefined) fallbackRecord.item_name = updates.item_name
+    if (updates.date !== undefined) fallbackRecord.date = updates.date
+    if (updates.cost !== undefined) fallbackRecord.cost = updates.cost
+    if (updates.status !== undefined) fallbackRecord.status = updates.status
+    fallbackRecord.description = details || null
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('maintenance')
+      .update(fallbackRecord as unknown as Updates<'maintenance'>)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (fallbackError) throw fallbackError
+    return fallbackData
+  }
+
+  throw error
+}
+
+/**
  * Delete a maintenance history record
  */
 export async function deleteMaintenance(id: string, client?: Client) {
