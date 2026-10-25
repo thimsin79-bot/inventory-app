@@ -409,7 +409,38 @@ export async function getMaintenance(client?: Client) {
     .order('date', { ascending: false })
 
   if (error) throw error
-  return data
+  if (!data) return []
+
+  // If live table still has the legacy schema (description column instead of brand/model/etc),
+  // parse the packaged metadata back into their respective fields so the UI displays them.
+  return data.map((row) => {
+    const raw = row as unknown as Record<string, unknown>
+    if (raw.description && typeof raw.description === 'string' && !raw.brand && !raw.model && !raw.category) {
+      const parts = raw.description.split(' | ')
+      const meta: Record<string, string> = {}
+      for (const part of parts) {
+        const colonIdx = part.indexOf(': ')
+        if (colonIdx !== -1) {
+          const key = part.slice(0, colonIdx).trim()
+          const val = part.slice(colonIdx + 2).trim()
+          meta[key] = val
+        }
+      }
+      return {
+        ...row,
+        brand: (raw.brand as string | null) ?? meta['Brand'] ?? null,
+        model: (raw.model as string | null) ?? meta['Model'] ?? null,
+        location: (raw.location as string | null) ?? meta['Location'] ?? null,
+        serial_number: (raw.serial_number as string | null) ?? meta['Serial'] ?? null,
+        category: (raw.category as string | null) ?? meta['Category'] ?? null,
+        supplier_name: (raw.supplier_name as string | null) ?? meta['Supplier'] ?? null,
+        department_name: (raw.department_name as string | null) ?? meta['Department'] ?? null,
+        purchase_date: (raw.purchase_date as string | null) ?? meta['Purchase Date'] ?? null,
+        remark: (raw.remark as string | null) ?? meta['Remark'] ?? (parts.length === 1 && !parts[0].includes(': ') ? parts[0] : null),
+      }
+    }
+    return row
+  })
 }
 
 /**
@@ -417,14 +448,54 @@ export async function getMaintenance(client?: Client) {
  */
 export async function createMaintenance(record: Inserts<'maintenance'>, client?: Client) {
   const supabase = getClient(client)
+  const id = nextId('MNT', 5)
+
+  // Try standard insert with all expanded columns
   const { data, error } = await supabase
     .from('maintenance')
-    .insert({ id: nextId('MNT', 5), ...record })
+    .insert({ id, ...record })
     .select()
     .single()
 
-  if (error) throw error
-  return data
+  if (!error) return data
+
+  // If live database has not run the ALTER TABLE migration yet (missing 'brand' column),
+  // fall back to the live schema and pack the extra metadata into description so the record is not lost.
+  if (error.message?.includes("'brand'") || error.message?.includes('schema cache')) {
+    const details = [
+      record.brand && `Brand: ${record.brand}`,
+      record.model && `Model: ${record.model}`,
+      record.location && `Location: ${record.location}`,
+      record.serial_number && `Serial: ${record.serial_number}`,
+      record.category && `Category: ${record.category}`,
+      record.supplier_name && `Supplier: ${record.supplier_name}`,
+      record.department_name && `Department: ${record.department_name}`,
+      record.purchase_date && `Purchase Date: ${record.purchase_date}`,
+      record.remark && `Remark: ${record.remark}`,
+    ]
+      .filter(Boolean)
+      .join(' | ')
+
+    const fallbackRecord: Record<string, unknown> = {
+      id,
+      item_name: record.item_name,
+      date: record.date,
+      cost: record.cost,
+      status: record.status,
+      description: details || null,
+    }
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('maintenance')
+      .insert(fallbackRecord as unknown as Inserts<'maintenance'>)
+      .select()
+      .single()
+
+    if (fallbackError) throw fallbackError
+    return fallbackData
+  }
+
+  throw error
 }
 
 /**

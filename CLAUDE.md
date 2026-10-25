@@ -301,6 +301,12 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     Clicking it opens a pre-filled maintenance modal populated with that item's name, brand, model,
     location, serial number, category, purchase date, supplier, department, and remark, allowing users
     to quickly log servicing or repairs to the `maintenance` table.
+20. **Closed 2026-10-25 — Handled missing 'brand' column in maintenance table.** The live database
+    table `maintenance` predated the expanded layout (lacking `brand`, `model`, etc.). `createMaintenance`
+    in `services/inventoryService.ts` now catches the PostgREST schema cache error and gracefully falls
+    back to the live schema columns, packaging metadata into `description`. `getMaintenance` unpacks
+    them back so all fields display properly. Running the idempotent `ALTER TABLE` block from `schema.sql`
+    in Supabase SQL editor upgrades the live table permanently.
 
 ---
 
