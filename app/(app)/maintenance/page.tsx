@@ -9,11 +9,11 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, StatusBadge, Textarea } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, SegmentedStatus, StatusBadge, Textarea } from '@/components/ui'
 
 type Row = Tables<'maintenance'>
 
-const STATUSES = ['Completed', 'In Progress', 'Scheduled']
+const STATUSES = ['1st', '2nd', '3rd'] as const
 
 const emptyForm = () => ({
   item_name: '',
@@ -22,7 +22,7 @@ const emptyForm = () => ({
   location: '',
   serial_number: '',
   category: '',
-  status: 'Completed',
+  status: '1st',
   cost: '0',
   purchase_date: '',
   supplier_name: '',
@@ -46,6 +46,7 @@ export default function MaintenancePage() {
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState<ErrorMap>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
 
   const state = useAsyncData(getMaintenance)
 
@@ -140,6 +141,22 @@ export default function MaintenancePage() {
     }
   }
 
+  async function handleQuickStatus(row: Row, newStatus: string) {
+    if (row.status === newStatus || updatingStatusId === row.id) return
+    setUpdatingStatusId(row.id)
+    setError(null)
+    setNotice(null)
+    try {
+      await updateMaintenance(row.id, { status: newStatus })
+      setNotice(`Updated ${row.item_name} status to ${newStatus}`)
+      state.reload()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setUpdatingStatusId(null)
+    }
+  }
+
   const columns: Column<Row>[] = [
     { key: 'item', header: 'Item', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.item_name}</span> },
     { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
@@ -147,7 +164,31 @@ export default function MaintenancePage() {
     { key: 'location', header: 'Location', render: (r) => r.location ?? <span className="text-zinc-400">—</span> },
     { key: 'serial_number', header: 'Serial Number', render: (r) => <span className="font-mono text-xs">{r.serial_number ?? <span className="font-sans text-zinc-400">—</span>}</span> },
     { key: 'category', header: 'Category Maintenance', render: (r) => r.category ?? <span className="text-zinc-400">—</span> },
-    { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (r) => {
+        const isStandard = STATUSES.some((s) => s.toLowerCase() === r.status.toLowerCase())
+        const isUpdating = updatingStatusId === r.id
+        return (
+          <div className="flex items-center gap-2">
+            <SegmentedStatus
+              size="sm"
+              options={STATUSES}
+              value={r.status}
+              disabled={isUpdating}
+              onChange={(newStatus) => handleQuickStatus(r, newStatus)}
+            />
+            {isUpdating && (
+              <span className="size-3.5 animate-spin rounded-full border-2 border-[#8e24aa] border-t-transparent" />
+            )}
+            {!isStandard && (
+              <StatusBadge status={r.status} />
+            )}
+          </div>
+        )
+      },
+    },
     { key: 'cost', header: 'Cost', render: (r) => <span className="tabular-nums">{formatMoney(r.cost)}</span> },
     { key: 'purchase_date', header: 'Date of Purchase', render: (r) => <span className="tabular-nums">{formatDate(r.purchase_date)}</span> },
     { key: 'supplier_name', header: 'Service Supplier', render: (r) => r.supplier_name ?? <span className="text-zinc-400">—</span> },
@@ -232,14 +273,14 @@ export default function MaintenancePage() {
           <Field label="Category Maintenance" htmlFor="mt-category">
             <Input id="mt-category" value={form.category} onChange={(e) => set({ category: e.target.value })} placeholder="Replace battery, toner service…" />
           </Field>
-          <Field label="Status" htmlFor="mt-status">
-            <Select id="mt-status" value={form.status} onChange={(e) => set({ status: e.target.value })}>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </Select>
+          <Field label="Statues" htmlFor="mt-status">
+            <div id="mt-status" className="pt-1">
+              <SegmentedStatus
+                options={STATUSES}
+                value={form.status}
+                onChange={(val) => set({ status: val })}
+              />
+            </div>
           </Field>
           <Field label="Cost" htmlFor="mt-cost" required error={formErrors.cost}>
             <Input id="mt-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => set({ cost: e.target.value })} />

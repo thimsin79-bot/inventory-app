@@ -129,13 +129,14 @@ export function Notice({
   return <p className={`rounded-md px-3 py-2 text-sm ${tones} ${className}`}>{children}</p>
 }
 
-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' }) {
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'info' | 'purple' }) {
   const tones = {
     neutral: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
     good: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
     warn: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
     bad: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
     info: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
+    purple: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
   }[tone]
 
   return (
@@ -148,12 +149,62 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
 /** Maps the free-text status columns used across tables to a badge tone. */
 export function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase()
-  let tone: 'neutral' | 'good' | 'warn' | 'bad' | 'info' = 'neutral'
-  if (['active', 'received', 'approved', 'issued', 'matched', 'returned', 'adjusted', 'completed'].includes(s)) tone = 'good'
+  let tone: 'neutral' | 'good' | 'warn' | 'bad' | 'info' | 'purple' = 'neutral'
+  if (['1st', '2nd', '3rd'].includes(s)) tone = 'purple'
+  else if (['active', 'received', 'approved', 'issued', 'matched', 'returned', 'adjusted', 'completed'].includes(s)) tone = 'good'
   else if (['pending', 'partial', 'in progress'].includes(s)) tone = 'warn'
   else if (['out of stock', 'rejected', 'low stock'].includes(s)) tone = 'bad'
   else if (['transfer', 'adjustment', 'scheduled'].includes(s)) tone = 'info'
   return <Badge tone={tone}>{status}</Badge>
+}
+
+/**
+ * 3-button segmented selector for status ('1st', '2nd', '3rd') matching AppSheet styling.
+ * Active button is solid purple (#8e24aa / purple-700) with white text.
+ */
+export function SegmentedStatus({
+  value,
+  onChange,
+  disabled = false,
+  size = 'md',
+  options = ['1st', '2nd', '3rd'],
+}: {
+  value: string
+  onChange: (val: string) => void
+  disabled?: boolean
+  size?: 'sm' | 'md'
+  options?: readonly string[]
+}) {
+  return (
+    <div className="inline-flex items-center gap-1.5" role="group" aria-label="Status selector">
+      {options.map((opt) => {
+        const isSelected = value?.toLowerCase() === opt.toLowerCase()
+        return (
+          <button
+            key={opt}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(opt)}
+            className={
+              size === 'sm'
+                ? `px-2.5 py-1 text-xs font-medium rounded transition-colors duration-150 border ${
+                    isSelected
+                      ? 'bg-[#8e24aa] text-white border-[#8e24aa] shadow-sm'
+                      : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`
+                : `px-5 py-2 text-sm font-medium rounded transition-colors duration-150 border ${
+                    isSelected
+                      ? 'bg-[#8e24aa] text-white border-[#8e24aa] shadow-sm'
+                      : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`
+            }
+          >
+            {opt}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {

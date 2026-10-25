@@ -536,7 +536,24 @@ export async function updateMaintenance(id: string, updates: Updates<'maintenanc
     if (updates.date !== undefined) fallbackRecord.date = updates.date
     if (updates.cost !== undefined) fallbackRecord.cost = updates.cost
     if (updates.status !== undefined) fallbackRecord.status = updates.status
-    fallbackRecord.description = details || null
+    const hasExpandedFields = [
+      updates.brand,
+      updates.model,
+      updates.location,
+      updates.serial_number,
+      updates.category,
+      updates.supplier_name,
+      updates.department_name,
+      updates.purchase_date,
+      updates.remark,
+    ].some((v) => v !== undefined)
+
+    const rawUpdates = updates as Record<string, unknown>
+    if (hasExpandedFields) {
+      fallbackRecord.description = details || null
+    } else if (rawUpdates.description !== undefined) {
+      fallbackRecord.description = rawUpdates.description
+    }
 
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('maintenance')

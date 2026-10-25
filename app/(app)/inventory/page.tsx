@@ -18,7 +18,7 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
-import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Badge, Textarea } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Badge, SegmentedStatus, Textarea } from '@/components/ui'
 import {
   EMPTY_ITEM,
   ItemFormFields,
@@ -165,7 +165,7 @@ export default function InventoryPage() {
       location: r.location ?? '',
       serial_number: r.serial_number ?? '',
       category: r.category?.name ?? '',
-      status: 'Completed',
+      status: '1st',
       cost: '0',
       purchase_date: r.purchase_date ?? '',
       supplier_name: r.supplier?.company ?? '',
@@ -546,18 +546,13 @@ export default function InventoryPage() {
               placeholder="Replace battery, toner service…"
             />
           </Field>
-          <Field label="Status" htmlFor="im-status">
-            <Select
-              id="im-status"
-              value={maintainForm.status}
-              onChange={(e) => setMaintainForm((f) => ({ ...f, status: e.target.value }))}
-            >
-              {['Completed', 'In Progress', 'Scheduled'].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </Select>
+          <Field label="Statues" htmlFor="im-status">
+            <div id="im-status" className="pt-1">
+              <SegmentedStatus
+                value={maintainForm.status}
+                onChange={(val) => setMaintainForm((f) => ({ ...f, status: val }))}
+              />
+            </div>
           </Field>
           <Field label="Cost" htmlFor="im-cost" required error={maintainErrors.cost}>
             <Input
