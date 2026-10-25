@@ -2,7 +2,7 @@
 
 # Project Context: Inventory Management System (Next.js + Supabase)
 
-**Last Updated:** October 17, 2026
+**Last Updated:** October 25, 2026
 **Project Path:** `D:\ICT\inventory-app`
 **Origin:** Port of the single-file prototype `D:\ICT\app.js` (school inventory for Cambodia).
 **Production:** `https://inventory-app-thimsin.vercel.app/` — auto-deploys from `origin/main` through
@@ -287,6 +287,12 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     is written; a failed row does not reserve its barcode). Blank cells leave the column default
     (create) or the current value (update). No new npm dependencies. Live-data only — no schema
     change, so it works against the current live database.
+17. **Closed 2026-10-25 — the "In stock" badge was removed from the inventory table.** In
+    `app/(app)/inventory/page.tsx`, items that are in stock (`stockTone === 'good'`) no longer display
+    the green badge, keeping the Quantity column clean with just the number and unit (e.g. 10 Pcs);
+    warning badges for Low and Out of stock are preserved. In `components/ui.tsx`, `Badge` gained
+    `whitespace-nowrap` so badges in compact tables never wrap words into two lines. Shipped as
+    `cdf52f5`.
 
 ---
 
