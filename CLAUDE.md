@@ -85,7 +85,7 @@ supabase/schema.sql       tables + RLS: anon-only policies, generated in one DO 
 supabase/seed.sql         verified reference data
 types/database.types.ts   generated from the live schema
 utils/format.ts, utils/errors.ts, utils/csv.ts  live helpers (csv = dependency-free RFC 4180 parse/serialize)
-scripts/                  check-supabase-env.mjs, check-rls.mjs
+scripts/                  check-supabase-env.mjs, check-rls.mjs, import-sheet.mjs (Google Sheet → items, §5 item 22)
 ```
 
 What was in the 2026-10-09 auth build and is **not** any more: `app/sign-in/`, `app/sign-up/`,
@@ -312,6 +312,21 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     Clicking `Edit` opens the modal pre-filled with that record's values, allowing users to modify
     fields and save with the `Update` button via the newly added `updateMaintenance` function in
     `services/inventoryService.ts`.
+22. **Closed 2026-10-25 — `npm run import:sheet` imports items from the ICT Google Sheet.**
+    `scripts/import-sheet.mjs` reads the 12 item tabs (Laptop, Desktop, Printer, Projector, Monitor,
+    Smart TV, Tablet, Security Camera, DVRNVR, Switch, Access PointRouter, Accessory) through the
+    sheet's `gviz` CSV endpoint — the sheet must be shared "Anyone with the link" (Viewer). Each tab
+    maps to a category by name; `ICT Code` is `items.barcode`. **Dry run by default**; `-- --apply`
+    writes. It only **adds** barcodes that are not in the database (never updates), creates missing
+    categories/suppliers by name, skips rows with an incomplete code or a duplicate code, and warns on
+    dates it cannot parse. Cleanup rules: `$1,234.00` → number, `N/A`/blank → empty, blank cost/price →
+    0, blank qty → 1, dates (`2-Oct-2017`, `10-Aug-17`, `8/10/2018` month-first, Excel serials) →
+    `YYYY-MM-DD`. Network calls retry up to 5× (connect timeouts are common on this machine). The
+    Maintenance History and Broken List tabs are **not** imported. Uses the publishable key from
+    `.env.local` like the app, so it is non-destructive and needs no PAT; it is deliberately **not** in
+    `npm run check`. First run on 2026-10-25 loaded 340 items (51 laptops, 35 desktops, 254 others).
+    Supplier spellings are copied as the sheet has them (e.g. `Asain IT` / `Asian IT` / `Asean IT`), so
+    merge duplicates in the Suppliers screen.
 
 ---
 
