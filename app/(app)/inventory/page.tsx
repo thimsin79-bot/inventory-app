@@ -174,7 +174,7 @@ export default function InventoryPage() {
             {r.qty}
           </span>
           <span className="text-xs text-zinc-500 dark:text-zinc-400">{r.unit}</span>
-          <Badge tone={stockTone(r)}>{stockLabel(r)}</Badge>
+          {stockTone(r) !== 'good' && <Badge tone={stockTone(r)}>{stockLabel(r)}</Badge>}
         </div>
       ),
     },

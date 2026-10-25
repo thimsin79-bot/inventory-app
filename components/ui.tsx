@@ -139,7 +139,7 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   }[tone]
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tones}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tones}`}>
       {children}
     </span>
   )
