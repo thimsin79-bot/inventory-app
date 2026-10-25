@@ -315,14 +315,14 @@ export default function InventoryPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, barcode, brand…"
-              className="w-64"
+              className="sm:w-64"
               aria-label="Search items"
             />
             <Select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               aria-label="Filter by category"
-              className="w-44"
+              className="sm:w-44"
             >
               <option value="all">All categories</option>
               {categoriesData.map((c) => (
@@ -336,7 +336,7 @@ export default function InventoryPage() {
               value={purchaseDate}
               onChange={(e) => setPurchaseDate(e.target.value)}
               aria-label="Filter by purchase date"
-              className="w-40"
+              className="sm:w-40"
               title="Filter by date of purchase"
             />
             {purchaseDate && (
