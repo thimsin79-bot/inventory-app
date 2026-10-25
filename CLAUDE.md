@@ -344,6 +344,16 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     tracked / Units on hand / Stock value / At or below min and their `stats` memo are gone from
     `app/(app)/inventory/page.tsx` per request. The header still shows the item count; low-stock rows
     still get the amber row tint. Reports keeps its own rollups.
+25. **Closed 2026-10-25 — Inventory row buttons collapsed into one "Actions" menu.** The four inline
+    buttons (Maintain / Move / Edit / Delete) are now a single `Actions` button per row that opens a
+    small menu (`components/RowActions.tsx`, takes `actions: { label, onSelect, tone? }[]`). The menu
+    is portalled to `<body>` and `fixed`-positioned from the button's rect: a table's overflow
+    container clips absolute popovers, and the pinned `actions` column (§5 item 23) is its own
+    stacking context that paints later rows over an in-cell menu — both were hit while building it.
+    It clamps to the viewport (the button sits at the left of a phone card), flips above the button
+    near the screen bottom, and closes on outside click / Escape / scroll / resize. Only Inventory
+    uses it so far; other screens still show inline buttons. Verified in headless Edge at 375 and
+    1440 px (menu items, flip, Escape, Edit opens its dialog).
 
 ---
 

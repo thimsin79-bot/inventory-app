@@ -18,6 +18,7 @@ import { useAsyncData } from '@/hooks/useAsyncData'
 import { AsyncBoundary } from '@/components/AsyncBoundary'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Modal } from '@/components/Modal'
+import { RowActions } from '@/components/RowActions'
 import { Button, Card, EmptyState, Field, Input, Notice, PageHeader, Select, Badge, SegmentedStatus, Textarea } from '@/components/ui'
 import {
   EMPTY_ITEM,
@@ -287,20 +288,14 @@ export default function InventoryPage() {
     header: '',
     className: 'text-right',
     render: (r) => (
-      <div className="flex justify-end gap-1">
-        <Button size="sm" onClick={() => openMaintain(r)}>
-          Maintain
-        </Button>
-        <Button size="sm" onClick={() => setMoving(r)}>
-          Move
-        </Button>
-        <Button size="sm" onClick={() => openEdit(r)}>
-          Edit
-        </Button>
-        <Button size="sm" variant="danger" onClick={() => setDeleting(r)}>
-          Delete
-        </Button>
-      </div>
+      <RowActions
+        actions={[
+          { label: 'Maintain', onSelect: () => openMaintain(r) },
+          { label: 'Move', onSelect: () => setMoving(r) },
+          { label: 'Edit', onSelect: () => openEdit(r) },
+          { label: 'Delete', tone: 'danger', onSelect: () => setDeleting(r) },
+        ]}
+      />
     ),
   })
 
