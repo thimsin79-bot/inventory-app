@@ -22,6 +22,20 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M12 22V12" />
     </>
   ),
+  stockIn: (
+    <>
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="M12 8v8" />
+      <path d="m8 12 4 4 4-4" />
+    </>
+  ),
+  stockOut: (
+    <>
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="M12 16V8" />
+      <path d="m8 12 4-4 4 4" />
+    </>
+  ),
   purchases: (
     <>
       <circle cx="8" cy="21" r="1" />
@@ -102,6 +116,8 @@ const ICONS: Record<string, ReactNode> = {
 const LINKS: { href: string; label: string; icon: keyof typeof ICONS }[] = [
   { href: '/', label: 'Dashboard', icon: 'dashboard' },
   { href: '/inventory', label: 'Inventory', icon: 'inventory' },
+  { href: '/stock-in', label: 'Stock In', icon: 'stockIn' },
+  { href: '/stock-out', label: 'Stock Out', icon: 'stockOut' },
   { href: '/purchases', label: 'Purchases', icon: 'purchases' },
   { href: '/requests', label: 'Requests', icon: 'requests' },
   { href: '/maintenance', label: 'Maintenance', icon: 'maintenance' },

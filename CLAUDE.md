@@ -100,7 +100,7 @@ The standalone `app/(app)/warehouses/` screen was removed too (the `warehouses` 
 `getWarehouses()` service call survive — the Import / Export screen reads the table to resolve
 warehouse names).
 
-**Screens:** `/`, `/inventory`, `/purchases`, `/requests`,
+**Screens:** `/`, `/inventory`, `/stock-in`, `/stock-out`, `/purchases`, `/requests`,
 `/maintenance`, `/reports`, `/import-export`, `/categories`, `/suppliers`, `/departments`, `/users`, `/settings`
 (prerendered static shells; data arrives on the client), plus `/login` — a standalone page outside
 the `(app)` shell that verifies a username + password against `app_users` and sets no session.
@@ -354,6 +354,15 @@ with the publishable key, which is exactly why the RLS policies target `anon`.
     near the screen bottom, and closes on outside click / Escape / scroll / resize. Only Inventory
     uses it so far; other screens still show inline buttons. Verified in headless Edge at 375 and
     1440 px (menu items, flip, Escape, Edit opens its dialog).
+26. **Closed 2026-11-05 — Stock In and Stock Out modules added.** Two new screens,
+    `/stock-in` and `/stock-out` (nav links after Inventory, also in landing-page options).
+    **Stock In** lists purchase orders (supplier, invoice, total, status), receives an order into
+    stock (item + quantity + editable minimum stock level) or creates a new received purchase, and
+    shows low-stock alerts. **Stock Out** lists department requests, approves/rejects them, issues
+    approved requests against matching inventory items (blocking any issue that would go negative),
+    records a new stock-out as an Issued request, and shows the same low-stock alerts. Both reuse
+    the existing `purchases`, `requests`, `items` and `suppliers` tables — no schema change — and a
+    shared `components/LowStockTable.tsx` defines the alert as `qty <= min_qty` for both.
 
 ---
 

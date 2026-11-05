@@ -14,6 +14,8 @@ export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 export const LANDING_OPTIONS: { value: string; label: string }[] = [
   { value: '/', label: 'Dashboard' },
   { value: '/inventory', label: 'Inventory' },
+  { value: '/stock-in', label: 'Stock In' },
+  { value: '/stock-out', label: 'Stock Out' },
   { value: '/purchases', label: 'Purchases' },
   { value: '/requests', label: 'Requests' },
   { value: '/maintenance', label: 'Maintenance History' },

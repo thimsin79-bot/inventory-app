@@ -42,21 +42,53 @@ export default function MaintenancePage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Row | null>(null)
+  const [copyingFrom, setCopyingFrom] = useState<Row | null>(null)
   const [deleting, setDeleting] = useState<Row | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState<ErrorMap>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
 
   const state = useAsyncData(getMaintenance)
 
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }))
 
+  function nextStatus(current: string): string {
+    const s = current.toLowerCase()
+    if (s === '1st') return '2nd'
+    if (s === '2nd') return '3rd'
+    return '1st'
+  }
+
   function openCreate() {
     setForm(emptyForm())
     setFormErrors({})
     setFormError(null)
+    setEditing(null)
+    setCopyingFrom(null)
     setCreating(true)
+  }
+
+  function openCopy(row: Row, targetStatus?: string) {
+    setForm({
+      item_name: row.item_name,
+      brand: row.brand ?? '',
+      model: row.model ?? '',
+      location: row.location ?? '',
+      serial_number: row.serial_number ?? '',
+      category: row.category ?? '',
+      status: targetStatus ?? nextStatus(row.status),
+      cost: '0',
+      purchase_date: row.purchase_date ?? '',
+      supplier_name: row.supplier_name ?? '',
+      department_name: row.department_name ?? '',
+      date: today(),
+      remark: row.remark ?? '',
+    })
+    setFormErrors({})
+    setFormError(null)
+    setEditing(null)
+    setCreating(false)
+    setCopyingFrom(row)
   }
 
   function openEdit(row: Row) {
@@ -77,10 +109,21 @@ export default function MaintenancePage() {
     })
     setFormErrors({})
     setFormError(null)
+    setCreating(false)
+    setCopyingFrom(null)
     setEditing(row)
   }
 
-  async function submit() {
+  function handleStatusClick(row: Row, newStatus: string) {
+    if (row.status.toLowerCase() === newStatus.toLowerCase()) {
+      openEdit(row)
+      return
+    }
+    // "On function update copy this row and edit the copy"
+    openCopy(row, newStatus)
+  }
+
+  async function submit(forceAsCopy = false) {
     const cost = Number(form.cost)
     const errors: ErrorMap = {}
     if (!form.item_name.trim()) errors.item_name = 'Item name is required.'
@@ -108,14 +151,22 @@ export default function MaintenancePage() {
         remark: trimmed(form.remark),
       }
 
-      if (editing) {
+      if (editing && !forceAsCopy) {
         await updateMaintenance(editing.id, payload)
         setEditing(null)
-        setNotice('Maintenance record updated')
+        setNotice(`Maintenance record for ${payload.item_name} updated`)
       } else {
         await createMaintenance(payload)
-        setCreating(false)
-        setNotice('Maintenance record added')
+        if (copyingFrom) {
+          setNotice(`Added ${payload.status} maintenance record for ${payload.item_name} (original history preserved)`)
+          setCopyingFrom(null)
+        } else if (editing && forceAsCopy) {
+          setNotice(`Saved as new maintenance record for ${payload.item_name} (original history preserved)`)
+          setEditing(null)
+        } else {
+          setNotice('Maintenance record added')
+          setCreating(false)
+        }
       }
       state.reload()
     } catch (e) {
@@ -141,22 +192,6 @@ export default function MaintenancePage() {
     }
   }
 
-  async function handleQuickStatus(row: Row, newStatus: string) {
-    if (row.status === newStatus || updatingStatusId === row.id) return
-    setUpdatingStatusId(row.id)
-    setError(null)
-    setNotice(null)
-    try {
-      await updateMaintenance(row.id, { status: newStatus })
-      setNotice(`Updated ${row.item_name} status to ${newStatus}`)
-      state.reload()
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setUpdatingStatusId(null)
-    }
-  }
-
   const columns: Column<Row>[] = [
     { key: 'item', header: 'Item', render: (r) => <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.item_name}</span> },
     { key: 'brand', header: 'Brand', render: (r) => r.brand ?? <span className="text-zinc-400">—</span> },
@@ -169,19 +204,14 @@ export default function MaintenancePage() {
       header: 'Status',
       render: (r) => {
         const isStandard = STATUSES.some((s) => s.toLowerCase() === r.status.toLowerCase())
-        const isUpdating = updatingStatusId === r.id
         return (
           <div className="flex items-center gap-2">
             <SegmentedStatus
               size="sm"
               options={STATUSES}
               value={r.status}
-              disabled={isUpdating}
-              onChange={(newStatus) => handleQuickStatus(r, newStatus)}
+              onChange={(newStatus) => handleStatusClick(r, newStatus)}
             />
-            {isUpdating && (
-              <span className="size-3.5 animate-spin rounded-full border-2 border-[#8e24aa] border-t-transparent" />
-            )}
             {!isStandard && (
               <StatusBadge status={r.status} />
             )}
@@ -201,6 +231,9 @@ export default function MaintenancePage() {
       className: 'text-right',
       render: (r) => (
         <div className="flex justify-end gap-1">
+          <Button size="sm" onClick={() => { setError(null); openCopy(r) }} title="Copy this row and edit the copy">
+            Copy
+          </Button>
           <Button size="sm" onClick={() => { setError(null); openEdit(r) }}>
             Edit
           </Button>
@@ -239,20 +272,36 @@ export default function MaintenancePage() {
       </Card>
 
       <Modal
-        open={creating || editing !== null}
-        title={editing ? `Edit ${editing.item_name}` : 'New maintenance record'}
-        onClose={() => { setCreating(false); setEditing(null) }}
+        open={creating || editing !== null || copyingFrom !== null}
+        title={
+          copyingFrom
+            ? `Copy & Edit — ${copyingFrom.item_name} (${form.status})`
+            : editing
+            ? `Edit ${editing.item_name}`
+            : 'New maintenance record'
+        }
+        onClose={() => { setCreating(false); setEditing(null); setCopyingFrom(null) }}
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setCreating(false); setEditing(null) }} disabled={busy}>
+            <Button variant="secondary" onClick={() => { setCreating(false); setEditing(null); setCopyingFrom(null) }} disabled={busy}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? 'Saving…' : editing ? 'Update' : 'Add record'}
+            {editing && (
+              <Button variant="secondary" onClick={() => submit(true)} disabled={busy} title="Create a new maintenance record from this row and preserve original">
+                {busy ? 'Saving…' : 'Save as copy'}
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => submit(false)} disabled={busy}>
+              {busy ? 'Saving…' : copyingFrom ? 'Save copy' : editing ? 'Update' : 'Add record'}
             </Button>
           </>
         }
       >
+        {copyingFrom && (
+          <div className="mb-3 rounded-md border border-purple-200 bg-purple-50 p-2.5 text-xs text-purple-900 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-200">
+            Copying equipment details from <span className="font-semibold">{copyingFrom.item_name}</span> ({copyingFrom.status} maintenance). Edit the maintenance info below and click <strong>&ldquo;Save copy&rdquo;</strong> to add a new history entry while preserving the previous record.
+          </div>
+        )}
         {formError && <Notice tone="bad" className="mb-3">{formError}</Notice>}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Item" htmlFor="mt-item" required error={formErrors.item_name} className="sm:col-span-2">
